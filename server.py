@@ -27,13 +27,13 @@ def __info():
 def publish_advertisements(channel, message):
     while True:
         channel.basic_publish(exchange='direct_logs', 
-                              routing_key='server_advertisements', 
+                              routing_key=common.SERVER_ADVERT, 
                               body=message)
         sleep(5)
 
-def end_server(channel, message):
+def stop_server(channel, message):
     channel.basic_publish(exchange='direct_logs', 
-                          routing_key='server_advertisements', 
+                          routing_key=common.SERVER_STOP, 
                           body=message)
 
 # Main function ---------------------------------------------------------------
@@ -48,27 +48,33 @@ if __name__ == '__main__':
                         help='Port of the RabitMQ server, '\
                         'defaults to %d' % common.DEFAULT_SERVER_PORT, \
                         default=common.DEFAULT_SERVER_PORT)
+    parser.add_argument('-n','--name', \
+                        help='Server name.',\
+                        required=True)
     args = parser.parse_args()
 
+    # Connection
     connection = pika.BlockingConnection(pika.ConnectionParameters(
-            host='localhost'))
+            host=args.host, port=args.port))
     channel = connection.channel()
-    
     channel.exchange_declare(exchange='direct_logs', type='direct')
+    
+    # Server advertisements
     channel.queue_declare(queue='server_advertisements')
-    
     channel.queue_bind(exchange='direct_logs',
                        queue='server_advertisements',
-                       routing_key='server_advertisements')
-    
+                       routing_key=common.SERVER_ADVERT)
     channel.queue_bind(exchange='direct_logs',
                        queue='server_advertisements',
-                       routing_key='server_advertisements')
-                   
-    t = threading.Thread(target=publish_advertisements, 
-                         args=(channel, 'server 1'))
+                       routing_key=common.SERVER_STOP)
+    
+    t = threading.Thread(target=publish_advertisements,
+                         args=(channel, args.name))
     t.setDaemon(True)
     t.start()
+    
+    
+    
     
     try:
         sleep(100)
@@ -76,4 +82,4 @@ if __name__ == '__main__':
         LOG.debug('Crtrl+C issued ...')
         LOG.info('Terminating server ...')
     
-    end_server(channel, 'end server 1')
+    stop_server(channel, args.name)
