@@ -20,6 +20,34 @@ ___NAME = 'Battleship Game Client'
 ___VER = '0.1.0.0'
 ___DESC = 'Battleship Game Client'
 ___BUILT = '2016-11-10'
+# Classes ---------------------------------------------------------------------
+class Clients():
+    def __init__(self, channel):
+        self.client_set = set()
+    
+    def process_client(self, ch, method, properties, body):
+        msg_parts = body.split(common.MSG_SEPARATOR, 1)
+        print msg_parts
+        print self.client_set
+        if msg_parts[0] == common.REQ_CONNECT:
+            if msg_parts[1] in self.client_set:
+                response = common.RSP_USERNAME_TAKEN
+            else:
+                self.client_set.add(msg_parts[1])
+                response = common.RSP_OK
+        elif msg_parts[0] == common.REQ_DISCONNECT:
+            try:
+                self.client_set.remove(msg_parts[1])
+                response = common.RSP_OK
+            except KeyError:
+                response = common.RSP_CLIENT_NOT_CONNECTED
+        else:
+            response = common.RSP_INVALID_REQUEST
+        
+        ch.basic_publish(exchange='direct_logs',
+                         routing_key=properties.reply_to,
+                         body=response)
+    
 # Functions -------------------------------------------------------------------
 def __info():
     return '%s version %s (%s)' % (___NAME, ___VER, ___BUILT)
@@ -27,13 +55,13 @@ def __info():
 def publish_advertisements(channel, message):
     while True:
         channel.basic_publish(exchange='direct_logs', 
-                              routing_key=common.SERVER_ADVERT, 
+                              routing_key='server_advert', 
                               body=message)
         sleep(5)
 
 def stop_server(channel, message):
     channel.basic_publish(exchange='direct_logs', 
-                          routing_key=common.SERVER_STOP, 
+                          routing_key='server_stop', 
                           body=message)
 
 # Main function ---------------------------------------------------------------
@@ -63,21 +91,27 @@ if __name__ == '__main__':
     channel.queue_declare(queue='server_advertisements')
     channel.queue_bind(exchange='direct_logs',
                        queue='server_advertisements',
-                       routing_key=common.SERVER_ADVERT)
+                       routing_key='server_advert')
     channel.queue_bind(exchange='direct_logs',
                        queue='server_advertisements',
-                       routing_key=common.SERVER_STOP)
+                       routing_key='server_stop')
     
     t = threading.Thread(target=publish_advertisements,
                          args=(channel, args.name))
     t.setDaemon(True)
     t.start()
     
-    
-    
+    # Client connections
+    clients = Clients(channel)
+    channel.queue_declare(queue='servers')
+    channel.queue_bind(exchange='direct_logs',
+                       queue='servers',
+                       routing_key=args.name)
+    channel.basic_consume(clients.process_client, queue='servers', no_ack=True)
     
     try:
-        sleep(100)
+        while True:
+            channel.start_consuming()
     except KeyboardInterrupt as e:
         LOG.debug('Crtrl+C issued ...')
         LOG.info('Terminating server ...')

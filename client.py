@@ -21,15 +21,16 @@ ___NAME = 'Battleship Game Client'
 ___VER = '0.1.0.0'
 ___DESC = 'Battleship Game Client'
 ___BUILT = '2016-11-10'
-# Functions -------------------------------------------------------------------
-def __info():
-    return '%s version %s (%s)' % (___NAME, ___VER, ___BUILT)
-
 # Classes ---------------------------------------------------------------------
 class ServerDialog(object):
-    def __init__(self, frame):
+    def __init__(self, frame, channel, client_queue):
+        self.channel = channel
+        self.client_queue = client_queue
+        
+        # If we are displaying list of servers
         self.updating_listbox = True
         
+        # GUI elements
         self.username_label = Tkinter.Label(frame, text="Enter username:")
         self.username_label.pack()
         self.username_entry = Tkinter.Entry(frame)
@@ -39,7 +40,7 @@ class ServerDialog(object):
         self.listbox_label.pack()
         self.listbox = Tkinter.Listbox(frame, width=40, height=20)
         self.listbox.pack()
-                
+        
         self.button_connect = Tkinter.Button(
             frame, text="Connect", command=self.connect_server)
         self.button_connect.pack()    
@@ -61,9 +62,9 @@ class ServerDialog(object):
         self.listbox.delete(listbox_index)
     
     def update(self, ch, method, properties, body):
-        if method.routing_key == common.SERVER_ADVERT:
+        if method.routing_key == 'server_advert':
             self.add_server(body)
-        if method.routing_key == common.SERVER_STOP:
+        if method.routing_key == 'server_stop':
             self.remove_server(body)
     
     def connect_server(self):
@@ -74,11 +75,28 @@ class ServerDialog(object):
         if username.strip() == '':
             tkMessageBox.showinfo('Username', 'Please enter username')
             return
-        print('TODO: connecting to server %s as %s' % (server_name, 
-                                                       username.strip()))
+        
+        # Sending connect request
+        message = common.REQ_CONNECT + common.MSG_SEPARATOR + username
+        self.channel.basic_publish(exchange='direct_logs',
+                                   routing_key=server_name,
+                                   properties=pika.BasicProperties(reply_to =\
+                                       self.client_queue),
+                                   body=message)
+    
+def on_response(ch, method, properties, body):
+    if body == common.RSP_OK:
+        print('Connected')
+    if body == common.RSP_USERNAME_TAKEN:
+        tkMessageBox.showinfo('Username', 'The username is already '+\
+                              'taken on this server')
+    return
 
 # Functions -------------------------------------------------------------------
-def listen_advertisements(channel):
+def __info():
+    return '%s version %s (%s)' % (___NAME, ___VER, ___BUILT)
+
+def listen(channel):
     channel.start_consuming()
 
 # Main method -----------------------------------------------------------------
@@ -100,6 +118,13 @@ if __name__ == '__main__':
             host=args.host, port=args.port))
     channel = connection.channel()
     channel.exchange_declare(exchange='direct_logs', type='direct')
+
+    # Client queue
+    callback = channel.queue_declare(exclusive=True)
+    client_queue = callback.method.queue
+    channel.queue_bind(exchange='direct_logs',
+                       queue=client_queue,
+                       routing_key=client_queue)
     
     # GUI
     root = Tkinter.Tk()
@@ -109,25 +134,29 @@ if __name__ == '__main__':
     frame.pack()
     
     # Server advertisements
-    server_dialog = ServerDialog(frame)
+    server_dialog = ServerDialog(frame, channel, client_queue)
     channel.queue_declare('server_advertisements')
     channel.queue_bind(exchange='direct_logs',
                        queue='server_advertisements',
-                       routing_key=common.SERVER_ADVERT)
+                       routing_key='server_advert')
     channel.queue_bind(exchange='direct_logs',
                        queue='server_advertisements',
-                       routing_key=common.SERVER_STOP)
+                       routing_key='server_stop')
     channel.basic_consume(server_dialog.update,
-                          queue='server_advertisements',
-                          no_ack=True)
-    t_adds = threading.Thread(target=listen_advertisements, args=(channel,))
+                          queue='server_advertisements', no_ack=True)
+    
+    # Client queue consume
+    channel.basic_consume(on_response, queue=client_queue, no_ack=True)
+    
+    # Listening thread
+    t_adds = threading.Thread(target=listen, args=(channel,))
     t_adds.setDaemon(True)
     t_adds.start()
-    
+                                   
     try:
         Tkinter.mainloop()
     except KeyboardInterrupt as e:
         LOG.debug('Crtrl+C issued ...')
-        LOG.info('Terminating server ...')
+        LOG.info('Terminating client ...')
     
     server_dialog.updating_listbox = False
