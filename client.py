@@ -28,9 +28,16 @@ def __info():
     return '%s version %s (%s)' % (___NAME, ___VER, ___BUILT)
 
 def window_control(events, server_window, lobby_window, game_window):
+    '''Get events from queue and show windows accordingly.
+    @param events: Queue of events
+    @param server_window: ServerWindow
+    @param lobby_window: LobbyWindow
+    @param game_window: GameWindow
+    '''
     while True:
         try:
-            event = events.get(timeout=5)
+            event, old_thread = events.get(timeout=5)
+            old_thread.join()
             if event == 'server':
                 server_window.show()
             elif event == 'lobby':
@@ -43,6 +50,8 @@ def window_control(events, server_window, lobby_window, game_window):
             pass
 
 def print_threads():
+    '''Print names of all active threads except for the current.
+    '''
     while True:
         print
         for t in threading.enumerate():
