@@ -5,3 +5,7 @@ def listen(channel):
                          name='Listening on channel')
     t.start()
     return t
+
+def stop_consuming(ch, method, properties, body):
+    ch.stop_consuming()
+    

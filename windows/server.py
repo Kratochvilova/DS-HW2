@@ -95,7 +95,7 @@ class ServerWindow(object):
         '''
         self.root.withdraw()
         self.on_hide()
-        self.events.put(('server', threading.current_thread())) # TODO: lobby window should be shown instead
+        self.events.put(('lobby', threading.current_thread()))
 
     def on_hide(self):
         '''Unbind queues, stop consuming.
@@ -156,12 +156,12 @@ class ServerWindow(object):
         
         # Sending connect request
         message = common.REQ_CONNECT + common.MSG_SEPARATOR + username
-        LOG.debug('Sending message to server %s: %s' % (server_name, message))
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=server_name,
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=message)
+        LOG.debug('Sent message to server %s: %s' % (server_name, message))
 
     def on_response(self, ch, method, properties, body):
         '''React on server response about connecting.

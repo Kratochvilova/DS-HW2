@@ -11,7 +11,9 @@ logging.basicConfig(level=logging.INFO, format=FORMAT)
 LOG = logging.getLogger()
 # Imports----------------------------------------------------------------------
 import common
+from windows import stop_consuming
 from windows.server import ServerWindow
+from windows.lobby import LobbyWindow
 from argparse import ArgumentParser
 import threading
 import pika
@@ -54,9 +56,10 @@ def print_threads():
     '''
     while True:
         print
+        print('Active threads:')
         for t in threading.enumerate():
             if t != threading.current_thread():
-                print t.name
+                print t
         sleep(3)
 
 # Main method -----------------------------------------------------------------
@@ -83,20 +86,29 @@ if __name__ == '__main__':
     server_advertisements = channel.queue_declare(exclusive=True).method.queue
     client_queue = channel.queue_declare(exclusive=True).method.queue
     
+    # 
+    control_queue = channel.queue_declare(exclusive=True).method.queue
+    channel.queue_bind(exchange='direct_logs',
+                       queue=control_queue,
+                       routing_key='')
+    channel.basic_consume(stop_consuming, 
+                          queue=control_queue,
+                          no_ack=True)
+    
     # Queue for window control
     events = Queue.Queue()
     
     # Application windows
     server_window = ServerWindow(channel, server_advertisements, client_queue, events)
-    lobby_window = object()
+    lobby_window = LobbyWindow(channel, server_advertisements, client_queue, events)
     game_window = object()
     
     server_window.lobby_window = lobby_window
-    #lobby_window.game_window = game_window
-    #lobby_window.server_window = server_window
+    lobby_window.game_window = game_window
+    lobby_window.server_window = server_window
     #game_window.lobby_window = lobby_window
     
-    # Controling which windosw are shown and which are hidden
+    # Controling which windows are shown and which are hidden
     t_control = threading.Thread(target=window_control, 
                                  args=(events, server_window, 
                                        lobby_window, game_window),
@@ -114,5 +126,8 @@ if __name__ == '__main__':
     except KeyboardInterrupt as e:
         LOG.debug('Crtrl+C issued ...')
         LOG.info('Terminating client ...')
-
-    channel.stop_consuming()
+    
+    # Send stop event to the control queue 
+    channel.basic_publish(exchange='direct_logs',
+                          routing_key='',
+                          body='')

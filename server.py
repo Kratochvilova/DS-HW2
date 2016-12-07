@@ -22,17 +22,44 @@ ___DESC = 'Battleship Game Client'
 ___BUILT = '2016-11-10'
 # Classes ---------------------------------------------------------------------
 class Clients():
-    def __init__(self, channel):
+    '''Process client connections.
+    '''
+    def __init__(self, channel, server_name):
+        '''Set a set of client usernames, communication channel, and consuming.
+        @param channel: pika connection channel
+        @param server_name: name of server
+        '''
+        # Set of client usernames
         self.client_set = set()
+        
+        # Communication
+        self.channel = channel
+        self.channel.queue_bind(exchange='direct_logs',
+                                queue='servers',
+                                routing_key=server_name)
+        self.channel.basic_consume(self.process_client,
+                                   queue='servers',
+                                   no_ack=True)
     
     def process_client(self, ch, method, properties, body):
+        '''Process client request.
+        @param ch: pika.BlockingChannel
+        @param method: pika.spec.Basic.Deliver
+        @param properties: pika.spec.BasicProperties
+        @param body: str or unicode        
+        '''
+        LOG.debug('Received message: %s' % body)
         msg_parts = body.split(common.MSG_SEPARATOR, 1)
+        
+        # Connect request
         if msg_parts[0] == common.REQ_CONNECT:
             if msg_parts[1] in self.client_set:
                 response = common.RSP_USERNAME_TAKEN
             else:
                 self.client_set.add(msg_parts[1])
                 response = common.RSP_OK
+        
+        # Disconnect request
         elif msg_parts[0] == common.REQ_DISCONNECT:
             try:
                 self.client_set.remove(msg_parts[1])
@@ -42,16 +69,18 @@ class Clients():
         else:
             response = common.RSP_INVALID_REQUEST
         
+        # Sending response
         ch.basic_publish(exchange='direct_logs',
                          routing_key=properties.reply_to,
                          body=response)
+        LOG.debug('Sent response to client: %s' % response)
     
 # Functions -------------------------------------------------------------------
 def __info():
     return '%s version %s (%s)' % (___NAME, ___VER, ___BUILT)
 
-def publish_advertisements(channel, message):
-    while True:
+def publish_advertisements(server_on, channel, message):
+    while server_on[0]:
         channel.basic_publish(exchange='direct_logs', 
                               routing_key='server_advert', 
                               body=message)
@@ -84,19 +113,21 @@ if __name__ == '__main__':
             host=args.host, port=args.port))
     channel = connection.channel()
     channel.exchange_declare(exchange='direct_logs', type='direct')
-    
-    t = threading.Thread(target=publish_advertisements,
-                         args=(channel, args.name))
-    t.setDaemon(True)
-    t.start()
+
+    # Queues
+    channel.queue_declare(queue='servers')
+    server_queue = channel.queue_declare(exclusive=True).method.queue
     
     # Client connections
-    clients = Clients(channel)
-    channel.queue_declare(queue='servers')
-    channel.queue_bind(exchange='direct_logs', 
-                       queue='servers',
-                       routing_key=args.name)
-    channel.basic_consume(clients.process_client, queue='servers', no_ack=True)
+    clients = Clients(channel, args.name)
+    
+    # Server advertisements
+    server_on = [True]
+    t = threading.Thread(target=publish_advertisements,
+                         args=(server_on, channel, args.name))
+    t.setDaemon(True)
+    t.start()
+    LOG.debug('Started advertising.')
     
     try:
         while True:
@@ -105,4 +136,6 @@ if __name__ == '__main__':
         LOG.debug('Crtrl+C issued ...')
         LOG.info('Terminating server ...')
     
+    server_on[0] = False
     stop_server(channel, args.name)
+    LOG.debug('Stopped advertising.')
