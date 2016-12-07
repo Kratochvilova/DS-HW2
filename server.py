@@ -4,7 +4,7 @@ Created on Thu Dec  1 15:41:13 2016
 
 @author: pavla kratochvilova
 """
-# Setup Python logging ------------------ -------------------------------------
+# Setup Python logging --------------------------------------------------------
 import logging
 FORMAT = '%(asctime)-15s %(levelname)s %(message)s'
 logging.basicConfig(level=logging.INFO, format=FORMAT)
@@ -27,8 +27,6 @@ class Clients():
     
     def process_client(self, ch, method, properties, body):
         msg_parts = body.split(common.MSG_SEPARATOR, 1)
-        print msg_parts
-        print self.client_set
         if msg_parts[0] == common.REQ_CONNECT:
             if msg_parts[1] in self.client_set:
                 response = common.RSP_USERNAME_TAKEN
@@ -87,15 +85,6 @@ if __name__ == '__main__':
     channel = connection.channel()
     channel.exchange_declare(exchange='direct_logs', type='direct')
     
-    # Server advertisements
-    channel.queue_declare(queue='server_advertisements')
-    channel.queue_bind(exchange='direct_logs',
-                       queue='server_advertisements',
-                       routing_key='server_advert')
-    channel.queue_bind(exchange='direct_logs',
-                       queue='server_advertisements',
-                       routing_key='server_stop')
-    
     t = threading.Thread(target=publish_advertisements,
                          args=(channel, args.name))
     t.setDaemon(True)
@@ -104,7 +93,7 @@ if __name__ == '__main__':
     # Client connections
     clients = Clients(channel)
     channel.queue_declare(queue='servers')
-    channel.queue_bind(exchange='direct_logs',
+    channel.queue_bind(exchange='direct_logs', 
                        queue='servers',
                        routing_key=args.name)
     channel.basic_consume(clients.process_client, queue='servers', no_ack=True)
