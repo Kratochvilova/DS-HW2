@@ -34,11 +34,12 @@ class Clients():
         
         # Communication
         self.channel = channel
+        self.connect_queue = channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
-                                queue='servers',
+                                queue=self.connect_queue,
                                 routing_key=server_name)
         self.channel.basic_consume(self.process_client,
-                                   queue='servers',
+                                   queue=self.connect_queue,
                                    no_ack=True)
     
     def process_client(self, ch, method, properties, body):
@@ -74,7 +75,7 @@ class Clients():
                          routing_key=properties.reply_to,
                          body=response)
         LOG.debug('Sent response to client: %s' % response)
-    
+
 # Functions -------------------------------------------------------------------
 def __info():
     return '%s version %s (%s)' % (___NAME, ___VER, ___BUILT)
@@ -114,10 +115,6 @@ if __name__ == '__main__':
     channel = connection.channel()
     channel.exchange_declare(exchange='direct_logs', type='direct')
 
-    # Queues
-    channel.queue_declare(queue='servers')
-    server_queue = channel.queue_declare(exclusive=True).method.queue
-    
     # Client connections
     clients = Clients(channel, args.name)
     
