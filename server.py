@@ -8,7 +8,8 @@ Created on Thu Dec  1 15:41:13 2016
 import logging
 FORMAT = '%(asctime)-15s %(levelname)s %(message)s'
 logging.basicConfig(level=logging.INFO, format=FORMAT)
-LOG = logging.getLogger()
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
 import common
 from argparse import ArgumentParser

@@ -8,10 +8,11 @@ Created on Thu Dec  1 15:41:34 2016
 import logging
 FORMAT = '%(asctime)-15s %(levelname)s %(message)s'
 logging.basicConfig(level=logging.INFO, format=FORMAT)
-LOG = logging.getLogger()
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
 import common
-from windows import stop_consuming
+from windows import stop_consuming, closing_windows
 from windows.server import ServerWindow
 from windows.lobby import LobbyWindow
 from argparse import ArgumentParser
@@ -52,6 +53,8 @@ def window_control(events, server_window, lobby_window, game_window):
                 channel.basic_publish(exchange='direct_logs',
                                       routing_key='quit',
                                       body='')
+                server_window.listening_thread.join()
+                # TODO: resolve quiting
                 server_window.root.quit()
                 lobby_window.root.quit()
                 #game_window.root.quit()
@@ -137,6 +140,4 @@ if __name__ == '__main__':
         LOG.debug('Crtrl+C issued ...')
         LOG.info('Terminating client ...')
         # Send stop event to the control queue 
-        channel.basic_publish(exchange='direct_logs',
-                              routing_key='quit',
-                              body='')
+        closing_windows(events)
