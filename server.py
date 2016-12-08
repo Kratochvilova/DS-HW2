@@ -23,7 +23,85 @@ ___DESC = 'Battleship Game Client'
 ___BUILT = '2016-11-10'
 # Classes ---------------------------------------------------------------------
 class Game():
-    pass
+    '''Game session.
+    '''
+    def __init__(self, name, owner, width, height):
+        self.name = name
+        self.state = 'opened'
+        self.width = width
+        self.height = height
+        self.owner = owner
+        self.players = set()
+
+class GameList():
+    '''List of game sessions.
+    '''
+    def __init__(self, channel, server_name):
+        # Dict of running games
+        self.games = {}
+        
+        # Communication
+        self.channel = channel
+        self.games_queue = channel.queue_declare(exclusive=True).method.queue
+        self.channel.queue_bind(exchange='direct_logs',
+                                queue=self.games_queue,
+                                routing_key=server_name+'.games')
+        self.channel.basic_consume(self.process_request,
+                                   queue=self.games_queue,
+                                   no_ack=True)
+        
+    def add_game(self, name, owner, width, height):
+        if name in self.games:
+            return 'name already exists'
+        game = Game(name, owner, width, height)
+        self.games[name] = game
+        return 'ok'
+
+    def remove_game(self, name):
+        try:
+            del self.games[name]
+            return 'ok'
+        except KeyError:
+            return 'name does not exist'
+    
+    def get_games(self, state=None):
+        if state == None:
+            return self.games
+        return [game for game in self.games if game.state == state]
+    
+    def process_request(self, ch, method, properties, body):
+        '''Process request about list of games.
+        @param ch: pika.BlockingChannel
+        @param method: pika.spec.Basic.Deliver
+        @param properties: pika.spec.BasicProperties
+        @param body: str or unicode        
+        '''
+        LOG.debug('Received message: %s' % body)
+        msg_parts = body.split(common.MSG_SEPARATOR, 1)
+        
+        # Get list of games request
+        if msg_parts[0] == common.REQ_CONNECT:
+            if msg_parts[1] in self.client_set:
+                response = common.RSP_USERNAME_TAKEN
+            else:
+                self.client_set.add(msg_parts[1])
+                response = common.RSP_OK
+        
+        # Disconnect request
+        elif msg_parts[0] == common.REQ_DISCONNECT:
+            try:
+                self.client_set.remove(msg_parts[1])
+                response = common.RSP_OK
+            except KeyError:
+                response = common.RSP_CLIENT_NOT_CONNECTED
+        else:
+            response = common.RSP_INVALID_REQUEST
+        
+        # Sending response
+        ch.basic_publish(exchange='direct_logs',
+                         routing_key=properties.reply_to,
+                         body=response)
+        LOG.debug('Sent response to client: %s' % response)
 
 class Clients():
     '''Process client connections.
@@ -47,7 +125,7 @@ class Clients():
                                    no_ack=True)
     
     def process_client(self, ch, method, properties, body):
-        '''Process client request.
+        '''Process client's connection request.
         @param ch: pika.BlockingChannel
         @param method: pika.spec.Basic.Deliver
         @param properties: pika.spec.BasicProperties
@@ -131,7 +209,7 @@ if __name__ == '__main__':
     LOG.debug('Started advertising.')
     
     # Dict of games
-    games = {}
+    game_list = GameList()
     
     try:
         while True:

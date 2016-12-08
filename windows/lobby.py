@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Dec  6 21:29:21 2016
+Created on Tue Dec  7 16:27:21 2016
 
 @author: pavla
 """
@@ -15,56 +15,66 @@ import tkMessageBox
 import logging
 LOG = logging.getLogger()
 # Classes ---------------------------------------------------------------------
-class ServerWindow(object):
-    '''Window for displaying active servers, entering username, and connecting
-    to servers.
+class LobbyWindow(object):
+    '''Window for displaying game sessions, and creating new sessions.
     '''
-    def __init__(self, channel, server_advertisements, client_queue, events):
+    def __init__(self, channel, server_advertisements, client_queue,
+                 events, parent):
         '''Set next window, gui elements, communication channel, and queues.
-        Show the server window.
+        Show the lobby window.
         @param channel: pika connection channel
         @param server_advertisements: queue for server advertisements
         @param client_queue: queue for messages to client
         @param events: Queue of events for window control
         '''
         # Next window
-        self.lobby_window = None
+        self.server_window = None
         self.game_window = None
         
         # Queue of events for window control
         self.events = events
         
         # GUI
-        self.root = Tkinter.Tk()
+        self.root = Tkinter.Toplevel(master=parent.root)
         self.root.title('Battleships')
         self.root.protocol("WM_DELETE_WINDOW", lambda: closing_windows(events))
         
         frame = Tkinter.Frame(self.root)
         frame.pack()
         
-        self.username_label = Tkinter.Label(frame, text="Enter username:")
-        self.username_label.pack()
-        self.username_entry = Tkinter.Entry(frame)
-        self.username_entry.pack()
+        self.create_label = Tkinter.Label(frame, text="Create new game:")
+        self.create_label.pack()
+        self.gamename_entry = Tkinter.Entry(frame)
+        self.gamename_entry.pack()
+        self.width_entry = Tkinter.Scale(frame, from_=0, to=20, 
+                                         orient=Tkinter.HORIZONTAL)
+        self.width_entry.pack()
+        self.height_entry = Tkinter.Scale(frame, from_=0, to=20, 
+                                          orient=Tkinter.HORIZONTAL)
+        self.height_entry.pack()
         
-        self.listbox_label = Tkinter.Label(frame, text="List of servers:")
+        self.button_create = Tkinter.Button(
+            frame, text="Create", command=self.create_game)
+        self.button_create.pack()
+        
+        self.listbox_label = Tkinter.Label(frame, text="List of games:")
         self.listbox_label.pack()
         self.listbox = Tkinter.Listbox(frame, width=40, height=20)
         self.listbox.pack()
         
-        self.button_connect = Tkinter.Button(
-            frame, text="Connect", command=self.connect_server)
-        self.button_connect.pack()
+        self.button_join = Tkinter.Button(
+            frame, text="Join", command=self.join_game)
+        self.button_join.pack()
         
         # Communication
         self.channel = channel
         self.server_advertisements = server_advertisements
         self.client_queue = client_queue
         
-        self.on_show()
+        self.root.withdraw()
     
     def show(self):
-        '''Show the server window.
+        '''Show the lobby window.
         '''
         self.root.deiconify()
         self.on_show()
@@ -74,10 +84,7 @@ class ServerWindow(object):
         '''
         # Clear listbox
         self.listbox.delete(0, Tkinter.END)
-        # Binding queues
-        self.channel.queue_bind(exchange='direct_logs',
-                                queue=self.server_advertisements,
-                                routing_key='server_advert')
+        # Binding queues TODO: bind correct stuff
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.server_advertisements,
                                 routing_key='server_stop')
@@ -93,6 +100,9 @@ class ServerWindow(object):
                                    no_ack=True)
         # Listening
         self.listening_thread = listen(self.channel)
+        
+        # Get list of games
+        self.get_games_list()
 
     def hide(self):
         '''Hide the server window and put event for the lobby sindow.
@@ -104,10 +114,7 @@ class ServerWindow(object):
     def on_hide(self):
         '''Unbind queues, stop consuming.
         '''
-        # Unbinding queues
-        self.channel.queue_unbind(exchange='direct_logs',
-                                  queue=self.server_advertisements,
-                                  routing_key='server_advert')
+        # Unbinding queues TODO: unbind correct stuff
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.server_advertisements,
                                   routing_key='server_stop')
@@ -117,68 +124,59 @@ class ServerWindow(object):
         # Stop consuming
         self.channel.stop_consuming()
     
-    def add_server(self, name):
-        '''Add server name into the listbox.
-        @param name: server name
+    def add_session(self, name):
+        '''Add game session name into the listbox.
+        @param name: game session name
         '''
         if name in self.listbox.get(0, Tkinter.END):
             return
         self.listbox.insert(Tkinter.END, name)
     
-    def remove_server(self, name):
-        '''Remove server name from the listbox.
-        @param name: server name
+    def remove_session(self, name):
+        '''Remove game session name from the listbox.
+        @param name: game session name
         '''
         if name not in self.listbox.get(0, Tkinter.END):
-            LOG.debug('Ignoring server %s removal, not in set.' % name)
+            LOG.debug('Ignoring game session %s removal, not in set.' % name)
             return
         listbox_index = self.listbox.get(0, Tkinter.END).index(name)
         self.listbox.delete(listbox_index)
     
     def update(self, ch, method, properties, body):
-        '''Update listbox of server names.
+        '''Update listbox of game session names.
         @param ch: pika.BlockingChannel
         @param method: pika.spec.Basic.Deliver
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        if method.routing_key == 'server_advert':
-            self.add_server(body)
-        if method.routing_key == 'server_stop':
-            self.remove_server(body)
-       
-    def connect_server(self):
-        '''Send connection request to server selected in the listbox.
-        '''
+        # TODO: game session update
+        pass
+
+    def get_games_list(self):
+        # TODO: get list of games from server
+        pass
+    
+    def create_game(self):
+        gamename = self.gamename_entry.get()
+        if gamename.strip() == '':
+            tkMessageBox.showinfo('Name', 'Please enter name of the game')
+            return
+        width = self.width_entry.get()
+        height = self.height_entry.get()
+        # TODO: send request
+    
+    def join_game(self):
         if self.listbox.curselection() == ():
             return
-        server_name = self.listbox.get(self.listbox.curselection())
-        username = self.username_entry.get()
-        if username.strip() == '':
-            tkMessageBox.showinfo('Username', 'Please enter username')
-            return
-        
-        # Sending connect request
-        message = common.REQ_CONNECT + common.MSG_SEPARATOR + username
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=server_name,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=message)
-        LOG.debug('Sent message to server %s: %s' % (server_name, message))
+        session_name = self.listbox.get(self.listbox.curselection())
+        # TODO: send request
 
     def on_response(self, ch, method, properties, body):
-        '''React on server response about connecting.
+        '''React on server response.
         @param ch: pika.BlockingChannel
         @param method: pika.spec.Basic.Deliver
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        LOG.debug('Received message: %s' % body)
-        if body == common.RSP_OK:
-            # If response ok, hide server window (and lobby window is shown)
-            self.hide()
-        if body == common.RSP_USERNAME_TAKEN:
-            tkMessageBox.showinfo('Username', 'The username is already '+\
-                                  'taken on this server')
-        return
+        # TODO
+        pass

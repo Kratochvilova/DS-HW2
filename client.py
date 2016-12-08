@@ -12,14 +12,13 @@ LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
 import common
-from windows import stop_consuming, closing_windows
+from windows import stop_consuming
 from windows.server import ServerWindow
 from windows.lobby import LobbyWindow
 from argparse import ArgumentParser
 import threading
 import pika
 import Queue
-import Tkinter
 from time import sleep
 # Constants -------------------------------------------------------------------
 ___NAME = 'Battleship Game Client'
@@ -132,7 +131,7 @@ if __name__ == '__main__':
     # Printing threads for debug
     t_debug = threading.Thread(target=print_threads, name='Debug printing')
     t_debug.setDaemon(True)
-    t_debug.start()
+    #t_debug.start()
     
     try:
         server_window.root.mainloop()
