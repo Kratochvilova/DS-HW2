@@ -54,10 +54,7 @@ def window_control(events, server_window, lobby_window, game_window):
                                       routing_key='quit',
                                       body='')
                 server_window.listening_thread.join()
-                # TODO: resolve quiting
-                server_window.root.quit()
-                lobby_window.root.quit()
-                #game_window.root.quit()
+                server_window.root.destroy()
                 break
             else:
                 LOG.debug('Unknown event for window control: %s' % event)
@@ -112,9 +109,12 @@ if __name__ == '__main__':
     events = Queue.Queue()
     
     # Application windows
-    server_window = ServerWindow(channel, server_advertisements, client_queue, events)
-    lobby_window = LobbyWindow(channel, server_advertisements, client_queue, events)
+    server_window = ServerWindow(channel, server_advertisements, 
+                                 client_queue, events)
+    lobby_window = LobbyWindow(channel, server_advertisements, 
+                               client_queue, events, server_window)
     game_window = object()
+    #Tkinter.NoDefaultRoot()
     
     server_window.lobby_window = lobby_window
     lobby_window.game_window = game_window
@@ -135,9 +135,11 @@ if __name__ == '__main__':
     t_debug.start()
     
     try:
-        Tkinter.mainloop()
+        server_window.root.mainloop()
     except KeyboardInterrupt as e:
         LOG.debug('Crtrl+C issued ...')
         LOG.info('Terminating client ...')
         # Send stop event to the control queue 
-        closing_windows(events)
+        channel.basic_publish(exchange='direct_logs',
+                              routing_key='quit',
+                              body='')

@@ -22,6 +22,9 @@ ___VER = '0.1.0.0'
 ___DESC = 'Battleship Game Client'
 ___BUILT = '2016-11-10'
 # Classes ---------------------------------------------------------------------
+class Game():
+    pass
+
 class Clients():
     '''Process client connections.
     '''
@@ -126,6 +129,9 @@ if __name__ == '__main__':
     t.setDaemon(True)
     t.start()
     LOG.debug('Started advertising.')
+    
+    # Dict of games
+    games = {}
     
     try:
         while True:
