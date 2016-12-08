@@ -39,13 +39,23 @@ def window_control(events, server_window, lobby_window, game_window):
     while True:
         try:
             event, old_thread = events.get(timeout=5)
-            old_thread.join()
+            if old_thread is not None:
+                old_thread.join()
             if event == 'server':
                 server_window.show()
             elif event == 'lobby':
                 lobby_window.show()
             elif event == 'game':
                 game_window.show()
+            elif event == 'close':
+                # To stop consuming
+                channel.basic_publish(exchange='direct_logs',
+                                      routing_key='quit',
+                                      body='')
+                server_window.root.quit()
+                lobby_window.root.quit()
+                #game_window.root.quit()
+                break
             else:
                 LOG.debug('Unknown event for window control: %s' % event)
         except Queue.Empty:
@@ -86,12 +96,12 @@ if __name__ == '__main__':
     server_advertisements = channel.queue_declare(exclusive=True).method.queue
     client_queue = channel.queue_declare(exclusive=True).method.queue
     
-    # 
+    # To stop consuming, since it doesn't work properly for threads
     control_queue = channel.queue_declare(exclusive=True).method.queue
     channel.queue_bind(exchange='direct_logs',
                        queue=control_queue,
-                       routing_key='')
-    channel.basic_consume(stop_consuming, 
+                       routing_key='quit')
+    channel.basic_consume(stop_consuming,
                           queue=control_queue,
                           no_ack=True)
     
@@ -126,8 +136,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt as e:
         LOG.debug('Crtrl+C issued ...')
         LOG.info('Terminating client ...')
-    
-    # Send stop event to the control queue 
-    channel.basic_publish(exchange='direct_logs',
-                          routing_key='',
-                          body='')
+        # Send stop event to the control queue 
+        channel.basic_publish(exchange='direct_logs',
+                              routing_key='quit',
+                              body='')

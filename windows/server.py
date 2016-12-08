@@ -6,7 +6,7 @@ Created on Tue Dec  6 21:29:21 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen
+from . import listen, closing_windows
 import threading
 import pika
 import Tkinter
@@ -29,6 +29,7 @@ class ServerWindow(object):
         '''
         # Next window
         self.lobby_window = None
+        self.game_window = None
         
         # Queue of events for window control
         self.events = events
@@ -36,6 +37,7 @@ class ServerWindow(object):
         # GUI
         self.root = Tkinter.Tk()
         self.root.title('Battleships')
+        self.root.protocol("WM_DELETE_WINDOW", lambda: closing_windows(events))
         
         frame = Tkinter.Frame(self.root)
         frame.pack()
@@ -95,7 +97,7 @@ class ServerWindow(object):
         '''
         self.root.withdraw()
         self.on_hide()
-        self.events.put(('lobby', threading.current_thread()))
+        self.events.put(('server', threading.current_thread()))
 
     def on_hide(self):
         '''Unbind queues, stop consuming.

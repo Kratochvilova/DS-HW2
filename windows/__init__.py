@@ -8,4 +8,6 @@ def listen(channel):
 
 def stop_consuming(ch, method, properties, body):
     ch.stop_consuming()
-    
+
+def closing_windows(events):
+    events.put(('close', None))
