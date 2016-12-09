@@ -111,13 +111,20 @@ class LobbyWindow(object):
         # Binding queues
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_advertisements,
-                                routing_key='game_open')
+                                routing_key=self.server_name + common.SEP +\
+                                    common.KEY_GAMES)
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_advertisements,
-                                routing_key='game_close')
+                                routing_key=self.server_name + common.SEP +\
+                                    common.KEY_GAME_OPEN)
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_advertisements,
-                                routing_key='game_end')
+                                routing_key=self.server_name + common.SEP +\
+                                    common.KEY_GAME_CLOSE)
+        self.channel.queue_bind(exchange='direct_logs',
+                                queue=self.game_advertisements,
+                                routing_key=self.server_name + common.SEP +\
+                                    common.KEY_GAME_END)
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.client_queue,
                                 routing_key=self.client_queue)
@@ -144,16 +151,23 @@ class LobbyWindow(object):
     def on_hide(self):
         '''Unbind queues, stop consuming.
         '''
-        # Unbinding queues TODO: unbind correct stuff
+        # Unbinding queues
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.game_advertisements,
-                                  routing_key='game_open')
+                                  routing_key=self.server_name + common.SEP +\
+                                      common.KEY_GAMES)
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.game_advertisements,
-                                  routing_key='game_close')
+                                  routing_key=self.server_name + common.SEP +\
+                                      common.KEY_GAME_OPEN)
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.game_advertisements,
-                                  routing_key='game_end')
+                                  routing_key=self.server_name + common.SEP +\
+                                      common.KEY_GAME_CLOSE)
+        self.channel.queue_unbind(exchange='direct_logs',
+                                  queue=self.game_advertisements,
+                                  routing_key=self.server_name + common.SEP +\
+                                      common.KEY_GAME_END)
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.client_queue,
                                   routing_key=self.client_queue)
@@ -166,7 +180,7 @@ class LobbyWindow(object):
     def disconnect(self):
         '''Disconnect from server.
         '''
-        msg = common.REQ_DISCONNECT + common.MSG_SEPARATOR + self.client_name
+        msg = common.REQ_DISCONNECT + common.SEP + self.client_name
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name,
                                    properties=pika.BasicProperties(reply_to =\
@@ -214,12 +228,13 @@ class LobbyWindow(object):
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        if method.routing_key == 'game_open':
+        key_parts = method.routing_key.split(common.SEP)
+        if key_parts[1] == common.KEY_GAME_OPEN:
             self.add_game(body, 'open')
-        if method.routing_key == 'game_close':
+        if key_parts[1] == common.KEY_GAME_CLOSE:
             self.remove_game(body, 'open')
             self.add_game(body, 'close')
-        if method.routing_key == 'game_end':
+        if key_parts[1] == common.KEY_GAME_END:
             self.remove_game(body, 'close')
 
     def get_games_list(self):
@@ -228,7 +243,8 @@ class LobbyWindow(object):
         # Sending request to get list of opened games
         msg = common.REQ_GET_LIST_OPENED
         self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + '.games',
+                                   routing_key=self.server_name + common.SEP +\
+                                       common.KEY_GAMES,
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=msg)
@@ -237,7 +253,8 @@ class LobbyWindow(object):
         # Sending request to get list of closed games
         msg = common.REQ_GET_LIST_CLOSED
         self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + '.games',
+                                   routing_key=self.server_name + common.SEP +\
+                                       common.KEY_GAMES,
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=msg)
@@ -269,7 +286,7 @@ class LobbyWindow(object):
         @param body: str or unicode
         '''
         LOG.debug('Received message: %s', body)
-        msg_parts = body.split(common.MSG_SEPARATOR)
+        msg_parts = body.split(common.SEP)
         
         if msg_parts[0] == common.RSP_DISCONNECTED:
             self.hide()

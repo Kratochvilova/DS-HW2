@@ -8,6 +8,14 @@ Created on Thu Dec  1 21:38:50 2016
 DEFAULT_SERVER_PORT = 5672
 DEFAULT_SERVER_INET_ADDR = '127.0.0.1'
 
+# Routing keys ----------------------------------------------------------------
+KEY_SERVER_ADVERT = 'server_advert'
+KEY_SERVER_STOP = 'server_stop'
+KEY_GAMES = 'games' # server_name + SEP + KEY_GAMES
+KEY_GAME_OPEN = 'game open' # server_name + SEP + KEY_GAME_OPEN
+KEY_GAME_CLOSE = 'game close' # server_name + SEP + KEY_GAME_CLOSE
+KEY_GAME_END = 'game end' # server_name + SEP + KEY_GAME_END
+
 # Connecting ------------------------------------------------------------------
 # Requests
 REQ_CONNECT = 'connect'
@@ -35,4 +43,4 @@ RSP_PERMISSION_DENIED = 'permission denied'
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'
 RSP_INVALID_REQUEST = 'invalid request'
-MSG_SEPARATOR = ':'
+SEP = ':'

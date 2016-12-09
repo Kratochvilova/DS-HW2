@@ -80,10 +80,10 @@ class ServerWindow(object):
         # Binding queues
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.server_advertisements,
-                                routing_key='server_advert')
+                                routing_key=common.KEY_SERVER_ADVERT)
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.server_advertisements,
-                                routing_key='server_stop')
+                                routing_key=common.KEY_SERVER_STOP)
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.client_queue,
                                 routing_key=self.client_queue)
@@ -110,10 +110,10 @@ class ServerWindow(object):
         # Unbinding queues
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.server_advertisements,
-                                  routing_key='server_advert')
+                                  routing_key=common.KEY_SERVER_ADVERT)
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.server_advertisements,
-                                  routing_key='server_stop')
+                                  routing_key=common.KEY_SERVER_STOP)
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.client_queue,
                                   routing_key=self.client_queue)
@@ -148,9 +148,9 @@ class ServerWindow(object):
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        if method.routing_key == 'server_advert':
+        if method.routing_key == common.KEY_SERVER_ADVERT:
             self.add_server(body)
-        if method.routing_key == 'server_stop':
+        if method.routing_key == common.KEY_SERVER_STOP:
             self.remove_server(body)
        
     def connect_server(self):
@@ -165,7 +165,7 @@ class ServerWindow(object):
             return
         
         # Sending connect request
-        message = common.REQ_CONNECT + common.MSG_SEPARATOR + username
+        message = common.REQ_CONNECT + common.SEP + username
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=server_name,
                                    properties=pika.BasicProperties(reply_to =\
@@ -181,7 +181,7 @@ class ServerWindow(object):
         @param body: str or unicode
         '''
         LOG.debug('Received message: %s', body)
-        msg_parts = body.split(common.MSG_SEPARATOR)
+        msg_parts = body.split(common.SEP)
         if msg_parts[0] == common.RSP_CONNECTED:
             # If response ok, hide server window and put event for the lobby
             # window with necessary arguments (server name, client name)

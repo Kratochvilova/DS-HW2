@@ -39,12 +39,8 @@ class GameList():
     def __init__(self, channel, server_name, clients):
         # Dict of running games
         self.games = {}
-        self.add_game('Hra1', 'Pavla', 1, 1)
-        self.add_game('Hra2', 'Pavla', 1, 1)
-        g = Game('LODE', 'Pavla', 1, 1)
-        g.state = 'closed'
-        self.games['LODE'] = g
         
+        self.server_name = server_name
         self.clients = clients
         
         # Communication
@@ -52,10 +48,19 @@ class GameList():
         self.games_queue = channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.games_queue,
-                                routing_key=server_name+'.games')
+                                routing_key=server_name +\
+                                    common.SEP +\
+                                    common.KEY_GAMES)
         self.channel.basic_consume(self.process_request,
                                    queue=self.games_queue,
                                    no_ack=True)
+                                   
+                                   
+        self.add_game('Hra1', 'Pavla', 1, 1)
+        self.add_game('Hra2', 'Pavla', 1, 1)
+        g = Game('LODE', 'Pavla', 1, 1)
+        g.state = 'closed'
+        self.games['LODE'] = g
         
     def add_game(self, name, owner, width, height):
         '''Add game to the dict of games.
@@ -66,6 +71,10 @@ class GameList():
         '''
         game = Game(name, owner, width, height)
         self.games[name] = game
+        self.channel.basic_publish(exchange='direct_logs',
+                                   routing_key=self.server_name + common.SEP +\
+                                       common.KEY_GAME_OPEN,
+                                   body=name)
 
     def remove_game(self, name):
         '''Remove game from the dict of games.
@@ -73,6 +82,11 @@ class GameList():
         '''
         try:
             del self.games[name]
+            self.channel.basic_publish(exchange='direct_logs',
+                                       routing_key=self.server_name +\
+                                           common.SEP +\
+                                           common.KEY_GAME_END,
+                                       body=name)
         except KeyError:
             pass
     
@@ -94,17 +108,17 @@ class GameList():
         '''
         LOG.debug('Processing game list request.')
         LOG.debug('Received message: %s', body)
-        msg_parts = body.split(common.MSG_SEPARATOR, 1)
+        msg_parts = body.split(common.SEP, 1)
         
         # Get list of games request
         if msg_parts[0] == common.REQ_GET_LIST_OPENED:
             game_names = [game.name for game in self.get_games('opened')]
-            response = common.RSP_LIST_OPENED + common.MSG_SEPARATOR +\
-                common.MSG_SEPARATOR.join(game_names)
+            response = common.RSP_LIST_OPENED + common.SEP +\
+                common.SEP.join(game_names)
         if msg_parts[0] == common.REQ_GET_LIST_CLOSED:
             game_names = [game.name for game in self.get_games('closed')]
-            response = common.RSP_LIST_CLOSED + common.MSG_SEPARATOR +\
-                common.MSG_SEPARATOR.join(game_names)
+            response = common.RSP_LIST_CLOSED + common.SEP +\
+                common.SEP.join(game_names)
 
         # Create game request
         if msg_parts[0] == common.REQ_CREATE_GAME:
@@ -157,7 +171,7 @@ class Clients():
         '''
         LOG.debug('Processing connection request.')
         LOG.debug('Received message: %s', body)
-        msg_parts = body.split(common.MSG_SEPARATOR, 1)
+        msg_parts = body.split(common.SEP, 1)
         response = None
         
         # Connect request
@@ -170,8 +184,8 @@ class Clients():
                     response = common.RSP_USERNAME_TAKEN
                 else:
                     self.client_set.add(msg_parts[1].strip())
-                    response = common.RSP_CONNECTED + common.MSG_SEPARATOR +\
-                        self.server_name + common.MSG_SEPARATOR + client_name
+                    response = common.RSP_CONNECTED + common.SEP +\
+                        self.server_name + common.SEP + client_name
         
         # Disconnect request
         elif msg_parts[0] == common.REQ_DISCONNECT:
@@ -191,16 +205,16 @@ class Clients():
 def __info():
     return '%s version %s (%s)' % (___NAME, ___VER, ___BUILT)
 
-def publish_advertisements(server_on, channel, message):
+def publish_server_advertisements(server_on, channel, message):
     while server_on[0]:
         channel.basic_publish(exchange='direct_logs', 
-                              routing_key='server_advert', 
+                              routing_key=common.KEY_SERVER_ADVERT, 
                               body=message)
-        sleep(5)
+        sleep(2)
 
 def stop_server(channel, message):
     channel.basic_publish(exchange='direct_logs', 
-                          routing_key='server_stop', 
+                          routing_key=common.KEY_SERVER_STOP, 
                           body=message)
 
 # Main function ---------------------------------------------------------------
@@ -231,11 +245,11 @@ if __name__ == '__main__':
     
     # Server advertisements
     server_on = [True]
-    t = threading.Thread(target=publish_advertisements,
+    t = threading.Thread(target=publish_server_advertisements,
                          args=(server_on, channel, args.name))
     t.setDaemon(True)
     t.start()
-    LOG.debug('Started advertising.')
+    LOG.debug('Started server advertising.')
     
     # Dict of games
     game_list = GameList(channel, args.name, clients)

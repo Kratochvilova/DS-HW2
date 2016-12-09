@@ -120,11 +120,3 @@ if __name__ == '__main__':
     except KeyboardInterrupt as e:
         LOG.debug('Crtrl+C issued ...')
         LOG.info('Terminating client ...')
-        # Send stop event to the control queue 
-        channel.basic_publish(exchange='direct_logs',
-                              routing_key='quit',
-                              body='')
-
-    t_debug = threading.Thread(target=print_threads, name='Debug printing')
-    t_debug.setDaemon(True)
-    t_debug.start()
