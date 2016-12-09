@@ -54,13 +54,6 @@ class GameList():
         self.channel.basic_consume(self.process_request,
                                    queue=self.games_queue,
                                    no_ack=True)
-                                   
-                                   
-        self.add_game('Hra1', 'Pavla', 1, 1)
-        self.add_game('Hra2', 'Pavla', 1, 1)
-        g = Game('LODE', 'Pavla', 1, 1)
-        g.state = 'closed'
-        self.games['LODE'] = g
         
     def add_game(self, name, owner, width, height):
         '''Add game to the dict of games.
@@ -108,7 +101,7 @@ class GameList():
         '''
         LOG.debug('Processing game list request.')
         LOG.debug('Received message: %s', body)
-        msg_parts = body.split(common.SEP, 1)
+        msg_parts = body.split(common.SEP)
         
         # Get list of games request
         if msg_parts[0] == common.REQ_GET_LIST_OPENED:
@@ -128,10 +121,12 @@ class GameList():
                 response = common.RSP_INVALID_REQUEST
             elif msg_parts[1] in self.games:
                 response = common.RSP_NAME_EXISTS
-            elif msg_parts[2] not in self.clients:
+            elif msg_parts[2] not in self.clients.client_set:
                 response = common.RSP_PERMISSION_DENIED
             else:
-                self.add_game(msg_parts[1:])
+                print msg_parts[1:]
+                self.add_game(*msg_parts[1:])
+                response = common.RSP_OK
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',
@@ -171,7 +166,7 @@ class Clients():
         '''
         LOG.debug('Processing connection request.')
         LOG.debug('Received message: %s', body)
-        msg_parts = body.split(common.SEP, 1)
+        msg_parts = body.split(common.SEP)
         response = None
         
         # Connect request

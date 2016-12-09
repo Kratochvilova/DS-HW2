@@ -261,13 +261,25 @@ class LobbyWindow(object):
         LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def create_game(self):
+        '''Send game creation request to server.
+        '''
         gamename = self.gamename_entry.get()
         if gamename.strip() == '':
             tkMessageBox.showinfo('Name', 'Please enter name of the game')
             return
         width = self.width_entry.get()
         height = self.height_entry.get()
-        # TODO: send request
+        
+        # Sending request to create game
+        msg = common.SEP.join([common.REQ_CREATE_GAME, gamename, 
+                               self.client_name, str(width), str(height)])
+        self.channel.basic_publish(exchange='direct_logs',
+                                   routing_key=self.server_name + common.SEP +\
+                                       common.KEY_GAMES,
+                                   properties=pika.BasicProperties(reply_to =\
+                                       self.client_queue),
+                                   body=msg)
+        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def join_game(self):
         if self.listbox_opened.curselection() == ():

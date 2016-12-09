@@ -18,7 +18,6 @@ from argparse import ArgumentParser
 import threading
 import pika
 import Queue
-from time import sleep
 # Constants -------------------------------------------------------------------
 ___NAME = 'Battleship Game Client'
 ___VER = '0.1.0.0'
@@ -53,17 +52,6 @@ def window_control(events, server_window, lobby_window, game_window):
                 LOG.debug('Unknown event for window control: %s', event)
         except Queue.Empty:
             pass
-
-def print_threads():
-    '''Print names of all active threads except for the current.
-    '''
-    while True:
-        print
-        print('Active threads:')
-        for t in threading.enumerate():
-            if t != threading.current_thread():
-                print t
-        sleep(5)
 
 # Main method -----------------------------------------------------------------
 if __name__ == '__main__':
@@ -112,8 +100,6 @@ if __name__ == '__main__':
                                  name='Window control')
     t_control.setDaemon(True)
     t_control.start()
-    
-    # Printing threads for debug
     
     try:
         server_window.root.mainloop()

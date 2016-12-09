@@ -3,6 +3,7 @@ LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 
 import threading
+from time import sleep
 
 def listen(channel, owner=None):
     def tmp_listen():
@@ -11,5 +12,25 @@ def listen(channel, owner=None):
         LOG.debug('LISTEN end, owner: %s', owner)
 
     t = threading.Thread(target=tmp_listen, name='Listening on channel')
+    t.setDaemon(True)
     t.start()
     return t
+
+def print_threads():
+    '''Print names of all active threads except for the current.
+    '''
+    while True:
+        print
+        print('Active threads:')
+        for t in threading.enumerate():
+            if t != threading.current_thread():
+                print t
+        sleep(5)
+
+def thread_printing():
+    '''Created thread that prints all active threads except for current thread
+    for debugging.
+    '''
+    t_debug = threading.Thread(target=print_threads, name='Debug printing')
+    t_debug.setDaemon(True)
+    t_debug.start()
