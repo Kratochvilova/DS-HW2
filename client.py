@@ -38,16 +38,23 @@ def window_control(events, server_window, lobby_window, game_window):
     '''
     while True:
         try:
-            event, old_thread = events.get(timeout=5)
+            event, old_thread, arguments = events.get(timeout=5)
             if old_thread is not None:
                 old_thread.join()
             if event == 'server':
-                server_window.show()
+                server_window.show(arguments)
             elif event == 'lobby':
-                lobby_window.show()
+                lobby_window.show(arguments)
             elif event == 'game':
-                game_window.show()
+                game_window.show(arguments)
             elif event == 'close':
+                if arguments is not None:
+                    # To disconnect from server
+                    msg = common.REQ_DISCONNECT + common.MSG_SEPARATOR +\
+                        arguments[1]
+                    channel.basic_publish(exchange='direct_logs',
+                                          routing_key=arguments[0],
+                                          body=msg)
                 # To stop consuming
                 channel.basic_publish(exchange='direct_logs',
                                       routing_key='quit',
@@ -92,8 +99,9 @@ if __name__ == '__main__':
     channel.exchange_declare(exchange='direct_logs', type='direct')
     
     # Queues
-    server_advertisements = channel.queue_declare(exclusive=True).method.queue
     client_queue = channel.queue_declare(exclusive=True).method.queue
+    server_advertisements = channel.queue_declare(exclusive=True).method.queue
+    game_advertisements = channel.queue_declare(exclusive=True).method.queue
     
     # To stop consuming, since it doesn't work properly for threads
     control_queue = channel.queue_declare(exclusive=True).method.queue
@@ -110,7 +118,7 @@ if __name__ == '__main__':
     # Application windows
     server_window = ServerWindow(channel, server_advertisements, 
                                  client_queue, events)
-    lobby_window = LobbyWindow(channel, server_advertisements, 
+    lobby_window = LobbyWindow(channel, game_advertisements, 
                                client_queue, events, server_window)
     game_window = object()
     #Tkinter.NoDefaultRoot()

@@ -36,9 +36,11 @@ class Game():
 class GameList():
     '''List of game sessions.
     '''
-    def __init__(self, channel, server_name):
+    def __init__(self, channel, server_name, clients):
         # Dict of running games
         self.games = {}
+        
+        self.clients = clients
         
         # Communication
         self.channel = channel
@@ -51,18 +53,14 @@ class GameList():
                                    no_ack=True)
         
     def add_game(self, name, owner, width, height):
-        if name in self.games:
-            return 'name already exists'
         game = Game(name, owner, width, height)
         self.games[name] = game
-        return 'ok'
 
     def remove_game(self, name):
         try:
             del self.games[name]
-            return 'ok'
         except KeyError:
-            return 'name does not exist'
+            pass
     
     def get_games(self, state=None):
         if state == None:
@@ -80,22 +78,25 @@ class GameList():
         msg_parts = body.split(common.MSG_SEPARATOR, 1)
         
         # Get list of games request
-        if msg_parts[0] == common.REQ_CONNECT:
-            if msg_parts[1] in self.client_set:
-                response = common.RSP_USERNAME_TAKEN
+        if msg_parts[0] == common.REQ_GET_LIST_OPENED:
+            response = common.RSP_LIST_OPENED + common.MSG_SEPARATOR +\
+                common.MSG_SEPARATOR.join(self.get_games('opened'))
+        if msg_parts[0] == common.REQ_GET_LIST_CLOSED:
+            response = common.RSP_LIST_CLOSED + common.MSG_SEPARATOR +\
+                common.MSG_SEPARATOR.join(self.get_games('closed'))
+
+        # Create game request
+        if msg_parts[0] == common.REQ_CREATE_GAME:
+            if len(msg_parts) != 5 or msg_parts[1].strip() == '' or\
+                msg_parts[2].strip() == '' or msg_parts[3].strip() == '' or\
+                msg_parts[4].strip() == '':
+                response = common.RSP_INVALID_REQUEST
+            elif msg_parts[1] in self.games:
+                response = common.RSP_NAME_EXISTS
+            elif msg_parts[2] not in self.clients:
+                response = common.RSP_PERMISSION_DENIED
             else:
-                self.client_set.add(msg_parts[1])
-                response = common.RSP_OK
-        
-        # Disconnect request
-        elif msg_parts[0] == common.REQ_DISCONNECT:
-            try:
-                self.client_set.remove(msg_parts[1])
-                response = common.RSP_OK
-            except KeyError:
-                response = common.RSP_CLIENT_NOT_CONNECTED
-        else:
-            response = common.RSP_INVALID_REQUEST
+                self.add_game(msg_parts[1:])
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',
@@ -114,12 +115,14 @@ class Clients():
         # Set of client usernames
         self.client_set = set()
         
+        self.server_name = server_name
+        
         # Communication
         self.channel = channel
         self.connect_queue = channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.connect_queue,
-                                routing_key=server_name)
+                                routing_key=self.server_name)
         self.channel.basic_consume(self.process_client,
                                    queue=self.connect_queue,
                                    no_ack=True)
@@ -133,30 +136,34 @@ class Clients():
         '''
         LOG.debug('Received message: %s' % body)
         msg_parts = body.split(common.MSG_SEPARATOR, 1)
+        response = None
         
         # Connect request
         if msg_parts[0] == common.REQ_CONNECT:
-            if msg_parts[1] in self.client_set:
+            client_name = msg_parts[1].strip()
+            if client_name in self.client_set:
                 response = common.RSP_USERNAME_TAKEN
             else:
-                self.client_set.add(msg_parts[1])
-                response = common.RSP_OK
+                self.client_set.add(msg_parts[1].strip())
+                response = common.RSP_OK + common.MSG_SEPARATOR +\
+                    self.server_name + common.MSG_SEPARATOR + client_name
         
         # Disconnect request
         elif msg_parts[0] == common.REQ_DISCONNECT:
             try:
                 self.client_set.remove(msg_parts[1])
-                response = common.RSP_OK
             except KeyError:
-                response = common.RSP_CLIENT_NOT_CONNECTED
+                pass
         else:
-            response = common.RSP_INVALID_REQUEST
+            pass
+            #response = common.RSP_INVALID_REQUEST
         
         # Sending response
-        ch.basic_publish(exchange='direct_logs',
-                         routing_key=properties.reply_to,
-                         body=response)
-        LOG.debug('Sent response to client: %s' % response)
+        if response is not None:
+            ch.basic_publish(exchange='direct_logs',
+                             routing_key=properties.reply_to,
+                             body=response)
+            LOG.debug('Sent response to client: %s' % response)
 
 # Functions -------------------------------------------------------------------
 def __info():
@@ -209,7 +216,7 @@ if __name__ == '__main__':
     LOG.debug('Started advertising.')
     
     # Dict of games
-    game_list = GameList()
+    game_list = GameList(channel, args.name, clients)
     
     try:
         while True:

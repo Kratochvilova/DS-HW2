@@ -37,7 +37,8 @@ class ServerWindow(object):
         # GUI
         self.root = Tkinter.Tk()
         self.root.title('Battleships')
-        self.root.protocol("WM_DELETE_WINDOW", lambda: closing_windows(events))
+        self.root.protocol("WM_DELETE_WINDOW", 
+                           lambda: closing_windows(events))
         
         frame = Tkinter.Frame(self.root)
         frame.pack()
@@ -63,8 +64,9 @@ class ServerWindow(object):
         
         self.on_show()
     
-    def show(self):
+    def show(self, arguments=None):
         '''Show the server window.
+        @param arguments: arguments passed from previous window
         '''
         self.root.deiconify()
         self.on_show()
@@ -95,11 +97,10 @@ class ServerWindow(object):
         self.listening_thread = listen(self.channel)
 
     def hide(self):
-        '''Hide the server window and put event for the lobby sindow.
+        '''Hide the server window.
         '''
         self.root.withdraw()
         self.on_hide()
-        self.events.put(('lobby', threading.current_thread()))
 
     def on_hide(self):
         '''Unbind queues, stop consuming.
@@ -175,10 +176,14 @@ class ServerWindow(object):
         @param body: str or unicode
         '''
         LOG.debug('Received message: %s' % body)
-        if body == common.RSP_OK:
-            # If response ok, hide server window (and lobby window is shown)
+        msg_parts = body.split(common.MSG_SEPARATOR)
+        if msg_parts[0] == common.RSP_OK:
+            # If response ok, hide server window and put event for the lobby
+            # window
             self.hide()
-        if body == common.RSP_USERNAME_TAKEN:
+            self.events.put(('lobby', threading.current_thread(), 
+                             [msg_parts[1], msg_parts[2]]))
+        if msg_parts[0] == common.RSP_USERNAME_TAKEN:
             tkMessageBox.showinfo('Username', 'The username is already '+\
                                   'taken on this server')
         return
