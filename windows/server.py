@@ -6,14 +6,15 @@ Created on Tue Dec  6 21:29:21 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen, closing_windows
+from . import listen
 import threading
 import pika
 import Tkinter
 import tkMessageBox
+import sys
 # Logging ---------------------------------------------------------------------
 import logging
-LOG = logging.getLogger()
+LOG = logging.getLogger(__name__)
 # Classes ---------------------------------------------------------------------
 class ServerWindow(object):
     '''Window for displaying active servers, entering username, and connecting
@@ -37,8 +38,7 @@ class ServerWindow(object):
         # GUI
         self.root = Tkinter.Tk()
         self.root.title('Battleships')
-        self.root.protocol("WM_DELETE_WINDOW", 
-                           lambda: closing_windows(events))
+        self.root.protocol("WM_DELETE_WINDOW", sys.exit)
         
         frame = Tkinter.Frame(self.root)
         frame.pack()
@@ -68,6 +68,7 @@ class ServerWindow(object):
         '''Show the server window.
         @param arguments: arguments passed from previous window
         '''
+        LOG.debug('Showing server window.')
         self.root.deiconify()
         self.on_show()
 
@@ -94,11 +95,12 @@ class ServerWindow(object):
                                    queue=self.client_queue,
                                    no_ack=True)
         # Listening
-        self.listening_thread = listen(self.channel)
+        self.listening_thread = listen(self.channel, 'server')
 
     def hide(self):
         '''Hide the server window.
         '''
+        LOG.debug('Hiding server window.')
         self.root.withdraw()
         self.on_hide()
 
@@ -116,7 +118,10 @@ class ServerWindow(object):
                                   queue=self.client_queue,
                                   routing_key=self.client_queue)
         # Stop consuming
-        self.channel.stop_consuming()
+        if threading.current_thread() == self.listening_thread:
+            self.channel.stop_consuming()
+        else:
+            LOG.error('ServerWindow.on_hide called from non-listening thread.')
     
     def add_server(self, name):
         '''Add server name into the listbox.
@@ -131,7 +136,7 @@ class ServerWindow(object):
         @param name: server name
         '''
         if name not in self.listbox.get(0, Tkinter.END):
-            LOG.debug('Ignoring server %s removal, not in set.' % name)
+            LOG.debug('Ignoring server %s removal, not in set.', name)
             return
         listbox_index = self.listbox.get(0, Tkinter.END).index(name)
         self.listbox.delete(listbox_index)
@@ -166,7 +171,7 @@ class ServerWindow(object):
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=message)
-        LOG.debug('Sent message to server %s: %s' % (server_name, message))
+        LOG.debug('Sent message to server %s: %s', server_name, message)
 
     def on_response(self, ch, method, properties, body):
         '''React on server response about connecting.
@@ -175,15 +180,14 @@ class ServerWindow(object):
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        LOG.debug('Received message: %s' % body)
+        LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.MSG_SEPARATOR)
-        if msg_parts[0] == common.RSP_OK:
+        if msg_parts[0] == common.RSP_CONNECTED:
             # If response ok, hide server window and put event for the lobby
-            # window
+            # window with necessary arguments (server name, client name)
             self.hide()
             self.events.put(('lobby', threading.current_thread(), 
                              [msg_parts[1], msg_parts[2]]))
         if msg_parts[0] == common.RSP_USERNAME_TAKEN:
             tkMessageBox.showinfo('Username', 'The username is already '+\
                                   'taken on this server')
-        return

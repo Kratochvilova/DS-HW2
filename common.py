@@ -7,28 +7,32 @@ Created on Thu Dec  1 21:38:50 2016
 # Connection related constants ------------------------------------------------
 DEFAULT_SERVER_PORT = 5672
 DEFAULT_SERVER_INET_ADDR = '127.0.0.1'
+
 # Connecting ------------------------------------------------------------------
 # Requests
-REQ_CONNECT = '1'
-REQ_DISCONNECT = '2'
-MSG_SEPARATOR = ':'
+REQ_CONNECT = 'connect'
+REQ_DISCONNECT = 'disconnect'
 # Responses
-RSP_OK = '0'
-RSP_USERNAME_TAKEN = '1'
-RSP_CLIENT_NOT_CONNECTED = '2'
-RSP_INVALID_REQUEST = '3'
+RSP_CONNECTED = 'connected'
+RSP_DISCONNECTED = 'disconnected'
+RSP_USERNAME_TAKEN = 'username taken'
+RSP_USERNAME_DOESNT_EXIST = 'username doesnt exist'
+
 # Game list -------------------------------------------------------------------
 # Requests
-REQ_GET_LIST_OPENED = '0'
-REQ_GET_LIST_CLOSED = '1'
-REQ_CREATE_GAME = '2'
-REQ_JOIN_GAME = '3'
-MSG_SEPARATOR = ':'
+REQ_GET_LIST_OPENED = 'get list opened'
+REQ_GET_LIST_CLOSED = 'get list closed'
+REQ_CREATE_GAME = 'create game'
+REQ_JOIN_GAME = 'join game'
+REQ_SPECTATE_GAME = 'spectate game'
 # Responses
-RSP_LIST_OPENED = '0'
-RSP_LIST_CLOSED = '1'
-RSP_OK = '2'
-RSP_NAME_EXISTS = '3'
-RSP_INVALID_USERNAME = '4'
-RSP_PERMISSION_DENIED = '5'
-RSP_INVALID_REQUEST = '6'
+RSP_LIST_OPENED = 'list opened'
+RSP_LIST_CLOSED = 'list closed'
+RSP_NAME_EXISTS = 'name exists'
+RSP_INVALID_USERNAME = 'invalid username'
+RSP_PERMISSION_DENIED = 'permission denied'
+
+# Common responses ------------------------------------------------------------
+RSP_OK = 'ok'
+RSP_INVALID_REQUEST = 'invalid request'
+MSG_SEPARATOR = ':'

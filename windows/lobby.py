@@ -6,14 +6,14 @@ Created on Tue Dec  7 16:27:21 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen, closing_windows
+from . import listen
 import threading
 import pika
 import Tkinter
 import tkMessageBox
 # Logging ---------------------------------------------------------------------
 import logging
-LOG = logging.getLogger()
+LOG = logging.getLogger(__name__)
 # Classes ---------------------------------------------------------------------
 class LobbyWindow(object):
     '''Window for displaying game sessions, and creating new sessions.
@@ -31,6 +31,7 @@ class LobbyWindow(object):
         self.server_window = None
         self.game_window = None
         
+        # Arguments from server_window
         self.server_name = None 
         self.client_name = None
         
@@ -40,12 +41,14 @@ class LobbyWindow(object):
         # GUI
         self.root = Tkinter.Toplevel(master=parent.root)
         self.root.title('Battleships')
-        self.root.protocol("WM_DELETE_WINDOW", 
-                           lambda: closing_windows(events, [self.server_name, 
-                                                            self.client_name]))
+        self.root.protocol("WM_DELETE_WINDOW", self.disconnect)
         
         frame = Tkinter.Frame(self.root)
         frame.pack()
+        
+        self.button_disconnect = Tkinter.Button(
+            frame, text="Disconnect", command=self.disconnect)
+        self.button_disconnect.pack()
         
         self.create_label = Tkinter.Label(frame, text="Create new game:")
         self.create_label.pack()
@@ -64,20 +67,20 @@ class LobbyWindow(object):
         
         self.listbox_label = Tkinter.Label(frame, text="List of opened games:")
         self.listbox_label.pack()
-        self.listbox_open = Tkinter.Listbox(frame, width=40, height=20)
-        self.listbox_open.pack()
+        self.listbox_opened = Tkinter.Listbox(frame, width=40, height=10)
+        self.listbox_opened.pack()
         
         self.button_join = Tkinter.Button(
             frame, text="Join", command=self.join_game)
         self.button_join.pack()
         
-        self.listbox_label = Tkinter.Label(frame, text="List of closed games:")
+        self.listbox_label = Tkinter.Label(frame, text="List of running games:")
         self.listbox_label.pack()
-        self.listbox_close = Tkinter.Listbox(frame, width=40, height=20)
-        self.listbox_close.pack()
+        self.listbox_closed = Tkinter.Listbox(frame, width=40, height=10)
+        self.listbox_closed.pack()
         
         self.button_join = Tkinter.Button(
-            frame, text="Spectate", command=self.join_game) # TODO: command for spectating
+            frame, text="Spectate", command=self.spectate_game)
         self.button_join.pack()
         
         # Communication
@@ -89,19 +92,22 @@ class LobbyWindow(object):
     
     def show(self, arguments):
         '''Show the lobby window.
-        @param arguments: arguments passed from previous window: [server_name]
+        @param arguments: arguments passed from previous window: 
+                          [server_name, client username]
         '''
-        self.root.deiconify()
+        LOG.debug('Showing lobby window.')
         self.server_name = arguments[0]
         self.client_name = arguments[1]
         self.on_show()
+        self.root.deiconify()
 
     def on_show(self):
         '''Bind queues, set consuming and listen.
         '''
-        # Clear listbox
-        self.listbox_open.delete(0, Tkinter.END)
-        self.listbox_close.delete(0, Tkinter.END)
+        # Clear listboxes
+        self.listbox_opened.delete(0, Tkinter.END)
+        self.listbox_closed.delete(0, Tkinter.END)
+        
         # Binding queues
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_advertisements,
@@ -123,7 +129,7 @@ class LobbyWindow(object):
                                    queue=self.client_queue,
                                    no_ack=True)
         # Listening
-        self.listening_thread = listen(self.channel)
+        self.listening_thread = listen(self.channel, 'lobby')
         
         # Get list of games
         self.get_games_list()
@@ -131,9 +137,9 @@ class LobbyWindow(object):
     def hide(self):
         '''Hide the server window and put event for the lobby sindow.
         '''
+        LOG.debug('Hiding lobby window.')
         self.root.withdraw()
         self.on_hide()
-        self.events.put(('lobby', threading.current_thread(), None))
 
     def on_hide(self):
         '''Unbind queues, stop consuming.
@@ -152,41 +158,54 @@ class LobbyWindow(object):
                                   queue=self.client_queue,
                                   routing_key=self.client_queue)
         # Stop consuming
-        self.channel.stop_consuming()
+        if threading.current_thread() == self.listening_thread:
+            self.channel.stop_consuming()
+        else:
+            LOG.error('LobbyWindow.on_hide called from non-listening thread.')
+    
+    def disconnect(self):
+        '''Disconnect from server.
+        '''
+        msg = common.REQ_DISCONNECT + common.MSG_SEPARATOR + self.client_name
+        self.channel.basic_publish(exchange='direct_logs',
+                                   routing_key=self.server_name,
+                                   properties=pika.BasicProperties(reply_to =\
+                                       self.client_queue),
+                                   body=msg)
     
     def add_game(self, name, state):
-        '''Add game session name into the listbox.
+        '''Add game session name into listbox.
         @param name: game session name
         '''
         if state == 'open':
-            if name in self.listbox_open.get(0, Tkinter.END):
+            if name in self.listbox_opened.get(0, Tkinter.END):
                 return
             else:
-                self.listbox_open.insert(Tkinter.END, name)
+                self.listbox_opened.insert(Tkinter.END, name)
         if state == 'close':
-            if name in self.listbox_close.get(0, Tkinter.END):
+            if name in self.listbox_closed.get(0, Tkinter.END):
                 return
             else:
-                self.listbox_close.insert(Tkinter.END, name)
+                self.listbox_closed.insert(Tkinter.END, name)
     
     def remove_game(self, name, state):
-        '''Remove game session name from the listbox.
+        '''Remove game session name from listbox.
         @param name: game session name
         '''
         if state == 'open':
-            if name not in self.listbox_open.get(0, Tkinter.END):
-                LOG.debug('Ignoring game session %s removal.' % name)
+            if name not in self.listbox_opened.get(0, Tkinter.END):
+                LOG.debug('Ignoring game session %s removal.', name)
                 return
             else:
-                index = self.listbox_open.get(0, Tkinter.END).index(name)
-                self.listbox_open.delete(index)
+                index = self.listbox_opened.get(0, Tkinter.END).index(name)
+                self.listbox_opened.delete(index)
         if state == 'close':
-            if name not in self.listbox_close.get(0, Tkinter.END):
-                LOG.debug('Ignoring game session %s removal.' % name)
+            if name not in self.listbox_closed.get(0, Tkinter.END):
+                LOG.debug('Ignoring game session %s removal.', name)
                 return
             else:
-                index = self.listbox_close.get(0, Tkinter.END).index(name)
-                self.listbox_close.delete(index)
+                index = self.listbox_closed.get(0, Tkinter.END).index(name)
+                self.listbox_closed.delete(index)
     
     def update(self, ch, method, properties, body):
         '''Update listbox of game session names.
@@ -204,20 +223,25 @@ class LobbyWindow(object):
             self.remove_game(body, 'close')
 
     def get_games_list(self):
-        # Sending connect request
+        '''Send requests to server to get list of all game sessions.
+        '''
+        # Sending request to get list of opened games
         msg = common.REQ_GET_LIST_OPENED
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name + '.games',
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=msg)
+        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+        
+        # Sending request to get list of closed games
         msg = common.REQ_GET_LIST_CLOSED
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name + '.games',
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=msg)
-        LOG.debug('Sent message to server %s: %s' % (self.server_name, msg))
+        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def create_game(self):
         gamename = self.gamename_entry.get()
@@ -229,11 +253,14 @@ class LobbyWindow(object):
         # TODO: send request
     
     def join_game(self):
-        if self.listbox.curselection() == ():
+        if self.listbox_opened.curselection() == ():
             return
-        session_name = self.listbox_open.get(self.listbox.curselection())
+        session_name = self.listbox_opened.get(self.listbox_opened.curselection())
         # TODO: send request
 
+    def spectate_game(self):
+        pass
+    
     def on_response(self, ch, method, properties, body):
         '''React on server response.
         @param ch: pika.BlockingChannel
@@ -241,5 +268,22 @@ class LobbyWindow(object):
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        # TODO
-        pass
+        LOG.debug('Received message: %s', body)
+        msg_parts = body.split(common.MSG_SEPARATOR)
+        
+        if msg_parts[0] == common.RSP_DISCONNECTED:
+            self.hide()
+            self.events.put(('server', None, None))
+        
+        if msg_parts[0] == common.RSP_LIST_OPENED:
+            for game_name in msg_parts[1:]:
+                self.add_game(game_name, 'open')
+        
+        if msg_parts[0] == common.RSP_LIST_CLOSED:
+            for game_name in msg_parts[1:]:
+                self.add_game(game_name, 'close')
+        if msg_parts[0] == common.RSP_USERNAME_TAKEN:
+            tkMessageBox.showinfo('Username', 'The username is already '+\
+                                  'taken on this server')
+        
+        # TODO: responses on create, join or spectate requests

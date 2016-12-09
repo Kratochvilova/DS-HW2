@@ -12,7 +12,6 @@ LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
 import common
-from windows import stop_consuming
 from windows.server import ServerWindow
 from windows.lobby import LobbyWindow
 from argparse import ArgumentParser
@@ -30,7 +29,8 @@ def __info():
     return '%s version %s (%s)' % (___NAME, ___VER, ___BUILT)
 
 def window_control(events, server_window, lobby_window, game_window):
-    '''Get events from queue and show windows accordingly.
+    '''Get events from queue and show windows accordingly. In case of close
+    event, all windows are closed, and disconnect request is sent if necessary.
     @param events: Queue of events
     @param server_window: ServerWindow
     @param lobby_window: LobbyWindow
@@ -39,31 +39,18 @@ def window_control(events, server_window, lobby_window, game_window):
     while True:
         try:
             event, old_thread, arguments = events.get(timeout=5)
+            LOG.debug('Got window event: %s', event)
             if old_thread is not None:
                 old_thread.join()
+            # Showing windows
             if event == 'server':
-                server_window.show(arguments)
+                server_window.show()
             elif event == 'lobby':
                 lobby_window.show(arguments)
             elif event == 'game':
                 game_window.show(arguments)
-            elif event == 'close':
-                if arguments is not None:
-                    # To disconnect from server
-                    msg = common.REQ_DISCONNECT + common.MSG_SEPARATOR +\
-                        arguments[1]
-                    channel.basic_publish(exchange='direct_logs',
-                                          routing_key=arguments[0],
-                                          body=msg)
-                # To stop consuming
-                channel.basic_publish(exchange='direct_logs',
-                                      routing_key='quit',
-                                      body='')
-                server_window.listening_thread.join()
-                server_window.root.destroy()
-                break
             else:
-                LOG.debug('Unknown event for window control: %s' % event)
+                LOG.debug('Unknown event for window control: %s', event)
         except Queue.Empty:
             pass
 
@@ -76,7 +63,7 @@ def print_threads():
         for t in threading.enumerate():
             if t != threading.current_thread():
                 print t
-        sleep(3)
+        sleep(5)
 
 # Main method -----------------------------------------------------------------
 if __name__ == '__main__':
@@ -103,15 +90,6 @@ if __name__ == '__main__':
     server_advertisements = channel.queue_declare(exclusive=True).method.queue
     game_advertisements = channel.queue_declare(exclusive=True).method.queue
     
-    # To stop consuming, since it doesn't work properly for threads
-    control_queue = channel.queue_declare(exclusive=True).method.queue
-    channel.queue_bind(exchange='direct_logs',
-                       queue=control_queue,
-                       routing_key='quit')
-    channel.basic_consume(stop_consuming,
-                          queue=control_queue,
-                          no_ack=True)
-    
     # Queue for window control
     events = Queue.Queue()
     
@@ -121,7 +99,6 @@ if __name__ == '__main__':
     lobby_window = LobbyWindow(channel, game_advertisements, 
                                client_queue, events, server_window)
     game_window = object()
-    #Tkinter.NoDefaultRoot()
     
     server_window.lobby_window = lobby_window
     lobby_window.game_window = game_window
@@ -137,9 +114,6 @@ if __name__ == '__main__':
     t_control.start()
     
     # Printing threads for debug
-    t_debug = threading.Thread(target=print_threads, name='Debug printing')
-    t_debug.setDaemon(True)
-    #t_debug.start()
     
     try:
         server_window.root.mainloop()
@@ -150,3 +124,7 @@ if __name__ == '__main__':
         channel.basic_publish(exchange='direct_logs',
                               routing_key='quit',
                               body='')
+
+    t_debug = threading.Thread(target=print_threads, name='Debug printing')
+    t_debug.setDaemon(True)
+    t_debug.start()

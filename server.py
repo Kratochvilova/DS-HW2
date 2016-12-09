@@ -39,6 +39,11 @@ class GameList():
     def __init__(self, channel, server_name, clients):
         # Dict of running games
         self.games = {}
+        self.add_game('Hra1', 'Pavla', 1, 1)
+        self.add_game('Hra2', 'Pavla', 1, 1)
+        g = Game('LODE', 'Pavla', 1, 1)
+        g.state = 'closed'
+        self.games['LODE'] = g
         
         self.clients = clients
         
@@ -53,19 +58,32 @@ class GameList():
                                    no_ack=True)
         
     def add_game(self, name, owner, width, height):
+        '''Add game to the dict of games.
+        @param name: name of game
+        @param owner: owner of game
+        @param width: width of field of game
+        @param height: height of field of game
+        '''
         game = Game(name, owner, width, height)
         self.games[name] = game
 
     def remove_game(self, name):
+        '''Remove game from the dict of games.
+        @param name: name of game
+        '''
         try:
             del self.games[name]
         except KeyError:
             pass
     
     def get_games(self, state=None):
+        '''Get list of games, optionally filtering by state.
+        @param state: state of game
+        @return list: list of games
+        '''
         if state == None:
             return self.games
-        return [game for game in self.games if game.state == state]
+        return [game for game in self.games.values() if game.state == state]
     
     def process_request(self, ch, method, properties, body):
         '''Process request about list of games.
@@ -74,16 +92,19 @@ class GameList():
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode        
         '''
-        LOG.debug('Received message: %s' % body)
+        LOG.debug('Processing game list request.')
+        LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.MSG_SEPARATOR, 1)
         
         # Get list of games request
         if msg_parts[0] == common.REQ_GET_LIST_OPENED:
+            game_names = [game.name for game in self.get_games('opened')]
             response = common.RSP_LIST_OPENED + common.MSG_SEPARATOR +\
-                common.MSG_SEPARATOR.join(self.get_games('opened'))
+                common.MSG_SEPARATOR.join(game_names)
         if msg_parts[0] == common.REQ_GET_LIST_CLOSED:
+            game_names = [game.name for game in self.get_games('closed')]
             response = common.RSP_LIST_CLOSED + common.MSG_SEPARATOR +\
-                common.MSG_SEPARATOR.join(self.get_games('closed'))
+                common.MSG_SEPARATOR.join(game_names)
 
         # Create game request
         if msg_parts[0] == common.REQ_CREATE_GAME:
@@ -102,7 +123,7 @@ class GameList():
         ch.basic_publish(exchange='direct_logs',
                          routing_key=properties.reply_to,
                          body=response)
-        LOG.debug('Sent response to client: %s' % response)
+        LOG.debug('Sent response to client: %s', response)
 
 class Clients():
     '''Process client connections.
@@ -134,36 +155,37 @@ class Clients():
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode        
         '''
-        LOG.debug('Received message: %s' % body)
+        LOG.debug('Processing connection request.')
+        LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.MSG_SEPARATOR, 1)
         response = None
         
         # Connect request
         if msg_parts[0] == common.REQ_CONNECT:
-            client_name = msg_parts[1].strip()
-            if client_name in self.client_set:
-                response = common.RSP_USERNAME_TAKEN
+            if len(msg_parts) != 2:
+                response = common.RSP_INVALID_REQUEST
             else:
-                self.client_set.add(msg_parts[1].strip())
-                response = common.RSP_OK + common.MSG_SEPARATOR +\
-                    self.server_name + common.MSG_SEPARATOR + client_name
+                client_name = msg_parts[1].strip()
+                if client_name in self.client_set:
+                    response = common.RSP_USERNAME_TAKEN
+                else:
+                    self.client_set.add(msg_parts[1].strip())
+                    response = common.RSP_CONNECTED + common.MSG_SEPARATOR +\
+                        self.server_name + common.MSG_SEPARATOR + client_name
         
         # Disconnect request
         elif msg_parts[0] == common.REQ_DISCONNECT:
             try:
                 self.client_set.remove(msg_parts[1])
+                response = common.RSP_DISCONNECTED
             except KeyError:
-                pass
-        else:
-            pass
-            #response = common.RSP_INVALID_REQUEST
+                response = common.RSP_USERNAME_DOESNT_EXIST
         
         # Sending response
-        if response is not None:
-            ch.basic_publish(exchange='direct_logs',
-                             routing_key=properties.reply_to,
-                             body=response)
-            LOG.debug('Sent response to client: %s' % response)
+        ch.basic_publish(exchange='direct_logs',
+                         routing_key=properties.reply_to,
+                         body=response)
+        LOG.debug('Sent response to client: %s', response)
 
 # Functions -------------------------------------------------------------------
 def __info():
