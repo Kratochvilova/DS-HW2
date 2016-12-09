@@ -25,13 +25,35 @@ ___BUILT = '2016-11-10'
 class Game():
     '''Game session.
     '''
-    def __init__(self, name, owner, width, height):
+    def __init__(self, channel, server_name, name, owner, width, height):
         self.name = name
         self.state = 'opened'
         self.width = width
         self.height = height
         self.owner = owner
         self.players = set()
+        self.players.add(owner)        
+        
+        # Communication
+        self.server_name = server_name
+        self.channel = channel
+        self.game_queue = channel.queue_declare(exclusive=True).method.queue
+        self.channel.queue_bind(exchange='direct_logs',
+                                queue=self.game_queue,
+                                routing_key=self.server_name + common.SEP +\
+                                    self.name)
+        self.channel.basic_consume(self.process_event,
+                                   queue=self.game_queue,
+                                   no_ack=True)
+        
+    def process_event(self, ch, method, properties, body):
+        '''Process game event.
+        @param ch: pika.BlockingChannel
+        @param method: pika.spec.Basic.Deliver
+        @param properties: pika.spec.BasicProperties
+        @param body: str or unicode
+        '''
+        pass
 
 class GameList():
     '''List of game sessions.
@@ -40,10 +62,9 @@ class GameList():
         # Dict of running games
         self.games = {}
         
+        # Communication
         self.server_name = server_name
         self.clients = clients
-        
-        # Communication
         self.channel = channel
         self.games_queue = channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
@@ -62,7 +83,7 @@ class GameList():
         @param width: width of field of game
         @param height: height of field of game
         '''
-        game = Game(name, owner, width, height)
+        game = Game(self.channel, self.server_name, name, owner, width, height)
         self.games[name] = game
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name + common.SEP +\
@@ -97,11 +118,12 @@ class GameList():
         @param ch: pika.BlockingChannel
         @param method: pika.spec.Basic.Deliver
         @param properties: pika.spec.BasicProperties
-        @param body: str or unicode        
+        @param body: str or unicode
         '''
         LOG.debug('Processing game list request.')
         LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.SEP)
+        response = None
         
         # Get list of games request
         if msg_parts[0] == common.REQ_GET_LIST_OPENED:
@@ -124,9 +146,22 @@ class GameList():
             elif msg_parts[2] not in self.clients.client_set:
                 response = common.RSP_PERMISSION_DENIED
             else:
-                print msg_parts[1:]
                 self.add_game(*msg_parts[1:])
-                response = common.RSP_OK
+                response = common.RSP_GAME_ENTERED + common.SEP + msg_parts[1]
+        
+        # Join game request
+        if msg_parts[0] == common.REQ_JOIN_GAME:
+            if len(msg_parts) != 3 or msg_parts[1].strip() == '':
+                response = common.RSP_INVALID_REQUEST
+            elif msg_parts[1] not in self.games:
+                response = common.RSP_NAME_DOESNT_EXIST
+            elif msg_parts[2] not in self.clients.client_set:
+                response = common.RSP_PERMISSION_DENIED
+            elif msg_parts[2] in self.games[msg_parts[1]].players:
+                response = common.RSP_PERMISSION_DENIED
+            else:
+                self.games[msg_parts[1]].players.add(msg_parts[2])
+                response = common.RSP_GAME_ENTERED + common.SEP + msg_parts[1]
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',

@@ -36,9 +36,11 @@ REQ_SPECTATE_GAME = 'spectate game'
 # Responses
 RSP_LIST_OPENED = 'list opened'
 RSP_LIST_CLOSED = 'list closed'
-RSP_NAME_EXISTS = 'name exists'
+RSP_GAME_ENTERED = 'game entered'
 RSP_INVALID_USERNAME = 'invalid username'
 RSP_PERMISSION_DENIED = 'permission denied'
+RSP_NAME_EXISTS = 'name exists'
+RSP_NAME_DOESNT_EXIST = 'name doesnt exist'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'

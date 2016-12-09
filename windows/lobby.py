@@ -282,10 +282,22 @@ class LobbyWindow(object):
         LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def join_game(self):
+        '''Send join game request to server.
+        '''
         if self.listbox_opened.curselection() == ():
             return
-        session_name = self.listbox_opened.get(self.listbox_opened.curselection())
-        # TODO: send request
+        gamename = self.listbox_opened.get(self.listbox_opened.curselection())
+        
+        # Sending request to create game
+        msg = common.SEP.join([common.REQ_JOIN_GAME, gamename,
+                               self.client_name])
+        self.channel.basic_publish(exchange='direct_logs',
+                                   routing_key=self.server_name + common.SEP +\
+                                       common.KEY_GAMES,
+                                   properties=pika.BasicProperties(reply_to =\
+                                       self.client_queue),
+                                   body=msg)
+        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
 
     def spectate_game(self):
         pass
@@ -300,17 +312,20 @@ class LobbyWindow(object):
         LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.SEP)
         
-        if msg_parts[0] == common.RSP_DISCONNECTED:
+        if msg_parts[0] == common.RSP_DISCONNECTED or\
+            msg_parts[0] == common.RSP_USERNAME_DOESNT_EXIST:
             self.hide()
             self.events.put(('server', None, None))
         
         if msg_parts[0] == common.RSP_LIST_OPENED:
             for game_name in msg_parts[1:]:
-                self.add_game(game_name, 'open')
+                if game_name.strip() != '':
+                    self.add_game(game_name, 'open')
         
         if msg_parts[0] == common.RSP_LIST_CLOSED:
             for game_name in msg_parts[1:]:
-                self.add_game(game_name, 'close')
+                if game_name.strip() != '':
+                    self.add_game(game_name, 'close')
         if msg_parts[0] == common.RSP_USERNAME_TAKEN:
             tkMessageBox.showinfo('Username', 'The username is already '+\
                                   'taken on this server')
