@@ -21,7 +21,7 @@ class LobbyWindow(object):
     def __init__(self, channel, game_advertisements, client_queue,
                  events, parent):
         '''Set next window, gui elements, communication channel, and queues.
-        Show the lobby window.
+        Hide the lobby window.
         @param channel: pika connection channel
         @param server_advertisements: queue for server advertisements
         @param client_queue: queue for messages to client
@@ -142,7 +142,7 @@ class LobbyWindow(object):
         self.get_games_list()
 
     def hide(self):
-        '''Hide the server window and put event for the lobby sindow.
+        '''Hide the lobby window.
         '''
         LOG.debug('Hiding lobby window.')
         self.root.withdraw()
