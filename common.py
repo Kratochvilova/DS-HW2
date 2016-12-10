@@ -57,6 +57,7 @@ RSP_LIST_PLAYERS = 'list players'
 # Game events -----------------------------------------------------------------
 E_NEW_PLAYER = 'new player'
 E_PLAYER_LEFT = 'player left'
+E_NEW_OWNER = 'new owner'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'

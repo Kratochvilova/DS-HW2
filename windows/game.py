@@ -32,7 +32,8 @@ class GameWindow(object):
         self.server_name = None 
         self.client_name = None
         self.game_name = None
-        self.players = []
+        self.is_owner = False
+        self.players = set()
         
         # Queue of events for window control
         self.events = events
@@ -65,12 +66,13 @@ class GameWindow(object):
     def show(self, arguments):
         '''Show the game window.
         @param arguments: arguments passed from previous window: 
-                          [server_name, client username, game name]
+                          [server_name, client username, game name, is_owner]
         '''
         LOG.debug('Showing game window.')
         self.server_name = arguments[0]
         self.client_name = arguments[1]
         self.game_name = arguments[2]
+        self.is_owner = arguments[3]
         self.on_show()
         self.root.deiconify()
 
@@ -144,7 +146,7 @@ class GameWindow(object):
         LOG.debug('Sent message to server %s: %s', self.server_name, msg)
 
     def reset_setting(self):
-        '''Resets frames, list of players
+        '''Resets frames, dimensions, list of players
         '''
         # Reset frames
         self.frame_player.destroy()
@@ -156,18 +158,21 @@ class GameWindow(object):
         self.frame_oponent = Tkinter.Frame(self.frame, borderwidth=15)
         self.frame_oponent.pack()
         
-        # Reset list of players
-        self.players = []
+        # Reset dimensions and list of players
+        self.width = None
+        self.height = None
+        self.players = set()
 
     def add_players(self, names):
         '''Add players to list of players and actualize the opponent_menu.
         @param names: names of players
         '''
         # Add player to list and remove self
-        self.players += names
+        for name in names:
+            self.players.add(name)
         try:
-            del self.players[self.players.index(self.client_name)]
-        except ValueError:
+            self.players.remove(self.client_name)
+        except KeyError:
             pass
         
         # Reset currently selected and delete old options
@@ -224,6 +229,9 @@ class GameWindow(object):
         LOG.debug('Sent message to server %s, game %s: %s',
                   self.server_name, self.game_name, msg)
     
+    def start_game(self):
+        pass
+    
     def on_response(self, ch, method, properties, body):
         '''React on server response.
         @param ch: pika.BlockingChannel
@@ -247,6 +255,8 @@ class GameWindow(object):
         
         # If response with dimensions, create the game fields
         if msg_parts[0] == common.RSP_DIMENSIONS:
+            if self.width is not None:
+                return
             self.width = int(msg_parts[1])
             self.height = int(msg_parts[2])
             self.game_label = Tkinter.Label(self.frame_player, text="Game:")
@@ -255,6 +265,13 @@ class GameWindow(object):
                 for j in range(self.width):
                     Tkinter.Button(self.frame_player).grid(row=i+1, column=j)
             
+            if self.is_owner:
+                self.button_start = Tkinter.Button(self.frame_player, 
+                                                   text="Start game", 
+                                                   command=self.start_game)
+                self.button_start.grid(row=self.height+2,columnspan=self.width)
+            
+            # second game field when the game starts
             self.opponent = Tkinter.StringVar(self.frame_oponent)
             self.opponent.set('')
             self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, 
@@ -283,3 +300,8 @@ class GameWindow(object):
 
         if msg_parts[0] == common.E_PLAYER_LEFT:
             self.remove_player(msg_parts[1])
+        
+        if msg_parts[0] == common.E_NEW_OWNER:
+            if msg_parts[1] == self.client_name:
+                self.owner = 1
+            

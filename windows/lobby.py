@@ -334,8 +334,8 @@ class LobbyWindow(object):
         if msg_parts[0] == common.RSP_GAME_ENTERED:
             # If game entered, hide lobby window and put event for the game
             # window with necessary arguments (server name, client name, game 
-            # name)
+            # name, is_owner)
             self.hide()
             self.events.put(('game', threading.current_thread(),
                              [self.server_name, self.client_name, 
-                              msg_parts[1]]))
+                              msg_parts[1], int(msg_parts[2])]))

@@ -17,6 +17,7 @@ from argparse import ArgumentParser
 from time import sleep
 import threading
 import pika
+import random
 # Constants -------------------------------------------------------------------
 ___NAME = 'Battleship Game Client'
 ___VER = '0.1.0.0'
@@ -117,7 +118,8 @@ class GameList():
                 response = common.RSP_PERMISSION_DENIED
             else:
                 self.add_game(*msg_parts[1:])
-                response = common.RSP_GAME_ENTERED + common.SEP + msg_parts[1]
+                response = common.SEP.join([common.RSP_GAME_ENTERED, 
+                                            msg_parts[1], '1'])
         
         # Join game request
         if msg_parts[0] == common.REQ_JOIN_GAME:
@@ -129,7 +131,8 @@ class GameList():
                 response = common.RSP_PERMISSION_DENIED
             else:
                 self.games[msg_parts[1]].players.add(msg_parts[2])
-                response = common.RSP_GAME_ENTERED + common.SEP + msg_parts[1]
+                response = common.SEP.join([common.RSP_GAME_ENTERED, 
+                                            msg_parts[1], '0'])
                 # Send event that new player was added
                 msg = common.E_NEW_PLAYER + common.SEP + msg_parts[2]
                 self.channel.basic_publish(exchange='direct_logs',
@@ -160,7 +163,19 @@ class GameList():
                                            common.SEP + common.KEY_GAME_EVENTS,
                                        body=msg)
                 LOG.debug('Sent game event: %s', msg)
-        
+                if len(self.games[msg_parts[1]].players) == 0:
+                    del self.games[msg_parts[1]]
+                elif self.games[msg_parts[1]].owner == msg_parts[2]:
+                    new_owner = random.choice(self.games[msg_parts[1]].players)
+                    self.games[msg_parts[1]].owner = new_owner
+                    # Send event that owner changed
+                    msg = common.E_NEW_OWNER + common.SEP + new_owner
+                    self.channel.basic_publish(exchange='direct_logs',
+                                               routing_key=self.server_name +\
+                                                   common.SEP + msg_parts[1] +\
+                                                   common.SEP +\
+                                                   common.KEY_GAME_EVENTS,
+                                               body=msg)
         # Sending response
         ch.basic_publish(exchange='direct_logs',
                          routing_key=properties.reply_to,
