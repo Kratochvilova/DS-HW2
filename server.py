@@ -50,14 +50,18 @@ class GameList():
         @param width: width of field of game
         @param height: height of field of game
         '''
-        # TODO: create in new thread
-        game = Game(self, self.channel, self.server_name, name, owner, width, height)
+        # Create game in new thread
+        game = Game(self, self.server_name, name, owner, width, height)
         self.games[name] = game
+        game.start()
+        
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name + common.SEP +\
                                        common.KEY_GAME_OPEN,
                                    body=name)
         LOG.debug('Sent event: added game: %s', name)
+        
+        return game
 
     def remove_game(self, name):
         '''Remove game from the dict of games.
@@ -116,7 +120,8 @@ class GameList():
             elif msg_parts[2] not in self.clients.client_set:
                 response = common.RSP_PERMISSION_DENIED
             else:
-                self.add_game(*msg_parts[1:])
+                game = self.add_game(*msg_parts[1:])
+                game.wait_for_ready()
                 response = common.SEP.join([common.RSP_GAME_ENTERED, 
                                             msg_parts[1], '1'])
         

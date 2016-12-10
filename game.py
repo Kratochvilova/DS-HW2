@@ -7,16 +7,19 @@ Created on Sat Dec 10 12:54:37 2016
 # Imports----------------------------------------------------------------------
 import common
 import random
+import pika
+import threading
 # Logging ---------------------------------------------------------------------
 import logging
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Classes ---------------------------------------------------------------------
-class Game():
+class Game(threading.Thread):
     '''Game session.
     '''
-    def __init__(self, game_list, channel, server_name,
-                 name, owner, width, height):
+    def __init__(self, game_list, server_name, name, owner, width, height):
+        super(Game, self).__init__(name='Game thread: %s' % name)
+        
         self.game_list = game_list
         
         # Game attributes
@@ -30,8 +33,17 @@ class Game():
         
         # Communication
         self.server_name = server_name
-        self.channel = channel
-        self.game_queue = channel.queue_declare(exclusive=True).method.queue
+        
+        self.ready_event = threading.Event()
+    
+    def run(self):
+        # Connection
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(
+                host=common.DEFAULT_SERVER_INET_ADDR, 
+                port=common.DEFAULT_SERVER_PORT))
+        self.channel = self.connection.channel()
+        self.channel.exchange_declare(exchange='direct_logs', type='direct')
+        self.game_queue = self.channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_queue,
                                 routing_key=self.server_name + common.SEP +\
@@ -39,13 +51,14 @@ class Game():
         self.channel.basic_consume(self.process_request,
                                    queue=self.game_queue,
                                    no_ack=True)
-    
-    def __del__(self):
-        self.channel.queue_unbind(exchange='direct_logs',
-                                  queue=self.game_queue,
-                                  routing_key=self.server_name + common.SEP +\
-                                      self.name)
         
+        self.ready_event.set()
+        self.channel.start_consuming()
+        self.game_list.remove_game(self.name)
+
+    def wait_for_ready(self):
+        self.ready_event.wait()
+
     def process_request(self, ch, method, properties, body):
         '''Process game request.
         @param ch: pika.BlockingChannel
@@ -78,7 +91,8 @@ class Game():
                 LOG.debug('Sent game event: %s', msg)
                 if len(self.players) == 0:
                     # TODO: destroy game
-                    pass
+                    self.channel.stop_consuming()
+                
                 elif self.owner == msg_parts[1]:
                     new_owner = random.choice(list(self.players))
                     self.owner = new_owner
