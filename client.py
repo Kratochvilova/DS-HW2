@@ -14,6 +14,7 @@ LOG.setLevel(logging.DEBUG)
 import common
 from windows.server import ServerWindow
 from windows.lobby import LobbyWindow
+from windows.game import GameWindow
 from argparse import ArgumentParser
 import threading
 import pika
@@ -86,12 +87,12 @@ if __name__ == '__main__':
                                  client_queue, events)
     lobby_window = LobbyWindow(channel, game_advertisements, 
                                client_queue, events, server_window)
-    game_window = object()
+    game_window = GameWindow(channel, client_queue, events, server_window)
     
     server_window.lobby_window = lobby_window
     lobby_window.game_window = game_window
     lobby_window.server_window = server_window
-    #game_window.lobby_window = lobby_window
+    game_window.lobby_window = lobby_window
     
     # Controling which windows are shown and which are hidden
     t_control = threading.Thread(target=window_control, 

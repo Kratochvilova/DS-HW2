@@ -12,6 +12,7 @@ LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
 import common
+from game import Game
 from argparse import ArgumentParser
 from time import sleep
 import threading
@@ -22,39 +23,6 @@ ___VER = '0.1.0.0'
 ___DESC = 'Battleship Game Client'
 ___BUILT = '2016-11-10'
 # Classes ---------------------------------------------------------------------
-class Game():
-    '''Game session.
-    '''
-    def __init__(self, channel, server_name, name, owner, width, height):
-        self.name = name
-        self.state = 'opened'
-        self.width = width
-        self.height = height
-        self.owner = owner
-        self.players = set()
-        self.players.add(owner)        
-        
-        # Communication
-        self.server_name = server_name
-        self.channel = channel
-        self.game_queue = channel.queue_declare(exclusive=True).method.queue
-        self.channel.queue_bind(exchange='direct_logs',
-                                queue=self.game_queue,
-                                routing_key=self.server_name + common.SEP +\
-                                    self.name)
-        self.channel.basic_consume(self.process_event,
-                                   queue=self.game_queue,
-                                   no_ack=True)
-        
-    def process_event(self, ch, method, properties, body):
-        '''Process game event.
-        @param ch: pika.BlockingChannel
-        @param method: pika.spec.Basic.Deliver
-        @param properties: pika.spec.BasicProperties
-        @param body: str or unicode
-        '''
-        pass
-
 class GameList():
     '''List of game sessions.
     '''
@@ -83,12 +51,13 @@ class GameList():
         @param width: width of field of game
         @param height: height of field of game
         '''
-        game = Game(self.channel, self.server_name, name, owner, width, height)
+        game = Game(self, self.channel, self.server_name, name, owner, width, height)
         self.games[name] = game
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name + common.SEP +\
                                        common.KEY_GAME_OPEN,
                                    body=name)
+        LOG.debug('Sent event: added game: %s', name)
 
     def remove_game(self, name):
         '''Remove game from the dict of games.
@@ -101,6 +70,7 @@ class GameList():
                                            common.SEP +\
                                            common.KEY_GAME_END,
                                        body=name)
+            LOG.debug('Sent event: removed game: %s', name)
         except KeyError:
             pass
     

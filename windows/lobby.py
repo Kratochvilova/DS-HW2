@@ -54,10 +54,10 @@ class LobbyWindow(object):
         self.create_label.pack()
         self.gamename_entry = Tkinter.Entry(frame)
         self.gamename_entry.pack()
-        self.width_entry = Tkinter.Scale(frame, from_=0, to=20, 
+        self.width_entry = Tkinter.Scale(frame, from_=1, to=20, 
                                          orient=Tkinter.HORIZONTAL)
         self.width_entry.pack()
-        self.height_entry = Tkinter.Scale(frame, from_=0, to=20, 
+        self.height_entry = Tkinter.Scale(frame, from_=1, to=20, 
                                           orient=Tkinter.HORIZONTAL)
         self.height_entry.pack()
         
@@ -330,4 +330,11 @@ class LobbyWindow(object):
             tkMessageBox.showinfo('Username', 'The username is already '+\
                                   'taken on this server')
         
-        # TODO: responses on create, join or spectate requests
+        if msg_parts[0] == common.RSP_GAME_ENTERED:
+            # If game entered, hide lobby window and put event for the game
+            # window with necessary arguments (server name, client name, game 
+            # name)
+            self.hide()
+            self.events.put(('game', threading.current_thread(),
+                             [self.server_name, self.client_name, 
+                              msg_parts[1]]))

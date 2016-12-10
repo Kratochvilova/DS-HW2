@@ -31,6 +31,7 @@ class GameWindow(object):
         # Arguments from server_window
         self.server_name = None 
         self.client_name = None
+        self.game_name = None
         
         # Queue of events for window control
         self.events = events
@@ -40,8 +41,18 @@ class GameWindow(object):
         self.root.title('Battleships')
         self.root.protocol("WM_DELETE_WINDOW", self.disconnect)
         
-        frame = Tkinter.Frame(self.root)
-        frame.pack()
+        self.frame = Tkinter.Frame(self.root)
+        self.frame.pack()
+        
+        self.button_leave = Tkinter.Button(self.frame, text="Leave", 
+                                           command=self.leave)
+        self.button_leave.pack()
+        
+        self.frame_player = Tkinter.Frame(self.frame, borderwidth=15)
+        self.frame_player.pack()
+        
+        self.frame_oponent = Tkinter.Frame(self.frame, borderwidth=15)
+        self.frame_oponent.pack()
         
         # Communication
         self.channel = channel
@@ -52,11 +63,12 @@ class GameWindow(object):
     def show(self, arguments):
         '''Show the game window.
         @param arguments: arguments passed from previous window: 
-                          [server_name, client username]
+                          [server_name, client username, game name]
         '''
         LOG.debug('Showing game window.')
         self.server_name = arguments[0]
         self.client_name = arguments[1]
+        self.game_name = arguments[2]
         self.on_show()
         self.root.deiconify()
 
@@ -73,6 +85,45 @@ class GameWindow(object):
                                    no_ack=True)
         # Listening
         self.listening_thread = listen(self.channel, 'game')
+        
+        # TODO: Get field dimensions and players
+        
+        
+        
+        self.game_label = Tkinter.Label(self.frame_player, text="Game:")
+        self.game_label.grid(columnspan=5)
+        
+        for i in range(5):
+            for j in range(5):
+                Tkinter.Button(self.frame_player).grid(row=i+1, column=j)
+        
+        
+        players = ['']
+        variable = Tkinter.StringVar(self.frame_oponent)
+        variable.set('')
+        
+        self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, variable, *players)
+        self.opponent_menu.grid(columnspan=5)
+        
+        for i in range(5):
+            for j in range(5):
+                Tkinter.Button(self.frame_oponent).grid(row=i+1, column=j)
+        
+        def refresh():
+            # Reset var and delete all old options
+            variable.set('')
+            self.opponent_menu['menu'].delete(0, 'end')
+        
+            # Insert list of new options (tk._setit hooks them up to var)
+            players.append('player1')
+            for choice in players:
+                self.opponent_menu['menu'].add_command(label=choice, command=Tkinter._setit(variable, choice))
+        
+        # I made this quick refresh bu20185tton to demonstrate
+        Tkinter.Button(self.frame_oponent, text='Refresh', command=refresh).grid(columnspan=3)
+
+
+
 
     def hide(self):
         '''Hide the game window.
@@ -103,6 +154,9 @@ class GameWindow(object):
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=msg)
+    
+    def leave(self):
+        pass
     
     def on_response(self, ch, method, properties, body):
         '''React on server response.
