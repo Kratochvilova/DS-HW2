@@ -127,13 +127,33 @@ class GameList():
                 response = common.RSP_NAME_DOESNT_EXIST
             elif msg_parts[2] not in self.clients.client_set:
                 response = common.RSP_PERMISSION_DENIED
-            elif msg_parts[2] in self.games[msg_parts[1]].players:
-                response = common.RSP_PERMISSION_DENIED
             else:
                 self.games[msg_parts[1]].players.add(msg_parts[2])
                 response = common.RSP_GAME_ENTERED + common.SEP + msg_parts[1]
                 # Send event that new player was added
                 msg = common.E_NEW_PLAYER + common.SEP + msg_parts[2]
+                self.channel.basic_publish(exchange='direct_logs',
+                                       routing_key=self.server_name +\
+                                           common.SEP + msg_parts[1] +\
+                                           common.SEP + common.KEY_GAME_EVENTS,
+                                       body=msg)
+                LOG.debug('Sent game event: %s', msg)
+        
+        # Leave game request
+        if msg_parts[0] == common.REQ_LEAVE_GAME:
+            if len(msg_parts) != 3 or msg_parts[1].strip() == '' or\
+                msg_parts[2].strip() == '' :
+                response = common.RSP_INVALID_REQUEST
+            elif msg_parts[1] not in self.games:
+                response = common.RSP_NAME_DOESNT_EXIST
+            else:
+                try:
+                    self.games[msg_parts[1]].players.remove(msg_parts[2])
+                except KeyError:
+                    pass
+                response = common.RSP_GAME_LEFT + common.SEP + msg_parts[1]
+                # Send event that player left
+                msg = common.E_PLAYER_LEFT + common.SEP + msg_parts[2]
                 self.channel.basic_publish(exchange='direct_logs',
                                        routing_key=self.server_name +\
                                            common.SEP + msg_parts[1] +\
@@ -199,9 +219,9 @@ class Clients():
         elif msg_parts[0] == common.REQ_DISCONNECT:
             try:
                 self.client_set.remove(msg_parts[1])
-                response = common.RSP_DISCONNECTED
             except KeyError:
-                response = common.RSP_USERNAME_DOESNT_EXIST
+                pass
+            response = common.RSP_DISCONNECTED
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',

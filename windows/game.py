@@ -97,6 +97,7 @@ class GameWindow(object):
         self.listening_thread = listen(self.channel, 'game')
         
         # Get field dimensions and players
+        self.reset_setting()
         self.get_dimensions()
         self.get_players()
 
@@ -132,7 +133,31 @@ class GameWindow(object):
         LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def leave(self):
-        pass
+        msg = common.SEP.join([common.REQ_LEAVE_GAME, self.game_name, 
+                               self.client_name])
+        self.channel.basic_publish(exchange='direct_logs',
+                                   routing_key=self.server_name + common.SEP +\
+                                       common.KEY_GAMES,
+                                   properties=pika.BasicProperties(reply_to =\
+                                       self.client_queue),
+                                   body=msg)
+        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+
+    def reset_setting(self):
+        '''Resets frames, list of players
+        '''
+        # Reset frames
+        self.frame_player.destroy()
+        self.frame_oponent.destroy()
+        
+        self.frame_player = Tkinter.Frame(self.frame, borderwidth=15)
+        self.frame_player.pack()
+        
+        self.frame_oponent = Tkinter.Frame(self.frame, borderwidth=15)
+        self.frame_oponent.pack()
+        
+        # Reset list of players
+        self.players = []
 
     def add_players(self, names):
         '''Add players to list of players and actualize the opponent_menu.
@@ -209,9 +234,16 @@ class GameWindow(object):
         LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.SEP)
         
+        # If disconnected
         if msg_parts[0] == common.RSP_DISCONNECTED:
             self.hide()
             self.events.put(('server', None, None))
+        
+        # If left
+        if msg_parts[0] == common.RSP_GAME_LEFT:
+            self.hide()
+            self.events.put(('lobby', None, 
+                             [self.server_name, self.client_name]))
         
         # If response with dimensions, create the game fields
         if msg_parts[0] == common.RSP_DIMENSIONS:

@@ -34,11 +34,13 @@ REQ_GET_LIST_OPENED = 'get list opened'
 REQ_GET_LIST_CLOSED = 'get list closed'
 REQ_CREATE_GAME = 'create game'
 REQ_JOIN_GAME = 'join game'
+REQ_LEAVE_GAME = 'leave game'
 REQ_SPECTATE_GAME = 'spectate game'
 # Responses
 RSP_LIST_OPENED = 'list opened'
 RSP_LIST_CLOSED = 'list closed'
 RSP_GAME_ENTERED = 'game entered'
+RSP_GAME_LEFT = 'game left'
 RSP_INVALID_USERNAME = 'invalid username'
 RSP_PERMISSION_DENIED = 'permission denied'
 RSP_NAME_EXISTS = 'name exists'
@@ -59,4 +61,6 @@ E_PLAYER_LEFT = 'player left'
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'
 RSP_INVALID_REQUEST = 'invalid request'
+
+# Separator -------------------------------------------------------------------
 SEP = ':'
