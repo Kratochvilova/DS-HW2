@@ -15,6 +15,8 @@ KEY_GAMES = 'games' # server_name + SEP + KEY_GAMES
 KEY_GAME_OPEN = 'game open' # server_name + SEP + KEY_GAME_OPEN
 KEY_GAME_CLOSE = 'game close' # server_name + SEP + KEY_GAME_CLOSE
 KEY_GAME_END = 'game end' # server_name + SEP + KEY_GAME_END
+KEY_GAME_EVENTS = 'game events' # server_name + SEP + game_name + SEP + 
+                                # KEY_GAME_EVENTS
 
 # Connecting ------------------------------------------------------------------
 # Requests
@@ -41,6 +43,18 @@ RSP_INVALID_USERNAME = 'invalid username'
 RSP_PERMISSION_DENIED = 'permission denied'
 RSP_NAME_EXISTS = 'name exists'
 RSP_NAME_DOESNT_EXIST = 'name doesnt exist'
+
+# Game ------------------------------------------------------------------------
+# Requests
+REQ_GET_DIMENSIONS = 'get dimensions'
+REQ_GET_PLAYERS = 'get players'
+# Responses
+RSP_DIMENSIONS = 'dimensions'
+RSP_LIST_PLAYERS = 'list players'
+
+# Game events -----------------------------------------------------------------
+E_NEW_PLAYER = 'new player'
+E_PLAYER_LEFT = 'player left'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'

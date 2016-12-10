@@ -34,15 +34,34 @@ class Game():
                                 queue=self.game_queue,
                                 routing_key=self.server_name + common.SEP +\
                                     self.name)
-        self.channel.basic_consume(self.process_event,
+        self.channel.basic_consume(self.process_request,
                                    queue=self.game_queue,
                                    no_ack=True)
         
-    def process_event(self, ch, method, properties, body):
-        '''Process game event.
+    def process_request(self, ch, method, properties, body):
+        '''Process game request.
         @param ch: pika.BlockingChannel
         @param method: pika.spec.Basic.Deliver
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        pass
+        LOG.debug('Processing game request.')
+        LOG.debug('Received message: %s', body)
+        msg_parts = body.split(common.SEP)
+        response = None
+        
+        # Get dimensions request
+        if msg_parts[0] == common.REQ_GET_DIMENSIONS:
+            response = common.SEP.join([common.RSP_DIMENSIONS,
+                                       self.width, self.height])
+        
+        # Get players request
+        if msg_parts[0] == common.REQ_GET_PLAYERS:
+            response = common.RSP_LIST_PLAYERS + common.SEP +\
+                common.SEP.join(self.players)
+
+        # Sending response
+        ch.basic_publish(exchange='direct_logs',
+                         routing_key=properties.reply_to,
+                         body=response)
+        LOG.debug('Sent response to client: %s', response)

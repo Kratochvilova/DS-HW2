@@ -132,6 +132,14 @@ class GameList():
             else:
                 self.games[msg_parts[1]].players.add(msg_parts[2])
                 response = common.RSP_GAME_ENTERED + common.SEP + msg_parts[1]
+                # Send event that new player was added
+                msg = common.E_NEW_PLAYER + common.SEP + msg_parts[2]
+                self.channel.basic_publish(exchange='direct_logs',
+                                       routing_key=self.server_name +\
+                                           common.SEP + msg_parts[1] +\
+                                           common.SEP + common.KEY_GAME_EVENTS,
+                                       body=msg)
+                LOG.debug('Sent game event: %s', msg)
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',

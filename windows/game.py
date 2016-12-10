@@ -17,7 +17,7 @@ LOG = logging.getLogger(__name__)
 class GameWindow(object):
     '''Window for displaying game.
     '''
-    def __init__(self, channel, client_queue, events, parent):
+    def __init__(self, channel, client_queue, events_queue, events, parent):
         '''Set next window, gui elements, communication channel, and queues.
         Hides the game window.
         @param channel: pika connection channel
@@ -32,6 +32,7 @@ class GameWindow(object):
         self.server_name = None 
         self.client_name = None
         self.game_name = None
+        self.players = []
         
         # Queue of events for window control
         self.events = events
@@ -57,6 +58,7 @@ class GameWindow(object):
         # Communication
         self.channel = channel
         self.client_queue = client_queue
+        self.events_queue = events_queue
         
         self.root.withdraw()
     
@@ -79,51 +81,24 @@ class GameWindow(object):
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.client_queue,
                                 routing_key=self.client_queue)
+        self.channel.queue_bind(exchange='direct_logs',
+                                queue=self.events_queue,
+                                routing_key=self.server_name + common.SEP +\
+                                    self.game_name + common.SEP +\
+                                    common.KEY_GAME_EVENTS)
         # Set consuming
         self.channel.basic_consume(self.on_response, 
                                    queue=self.client_queue,
                                    no_ack=True)
+        self.channel.basic_consume(self.on_event, 
+                                   queue=self.events_queue,
+                                   no_ack=True)
         # Listening
         self.listening_thread = listen(self.channel, 'game')
         
-        # TODO: Get field dimensions and players
-        
-        
-        
-        self.game_label = Tkinter.Label(self.frame_player, text="Game:")
-        self.game_label.grid(columnspan=5)
-        
-        for i in range(5):
-            for j in range(5):
-                Tkinter.Button(self.frame_player).grid(row=i+1, column=j)
-        
-        
-        players = ['']
-        variable = Tkinter.StringVar(self.frame_oponent)
-        variable.set('')
-        
-        self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, variable, *players)
-        self.opponent_menu.grid(columnspan=5)
-        
-        for i in range(5):
-            for j in range(5):
-                Tkinter.Button(self.frame_oponent).grid(row=i+1, column=j)
-        
-        def refresh():
-            # Reset var and delete all old options
-            variable.set('')
-            self.opponent_menu['menu'].delete(0, 'end')
-        
-            # Insert list of new options (tk._setit hooks them up to var)
-            players.append('player1')
-            for choice in players:
-                self.opponent_menu['menu'].add_command(label=choice, command=Tkinter._setit(variable, choice))
-        
-        # I made this quick refresh bu20185tton to demonstrate
-        Tkinter.Button(self.frame_oponent, text='Refresh', command=refresh).grid(columnspan=3)
-
-
-
+        # Get field dimensions and players
+        self.get_dimensions()
+        self.get_players()
 
     def hide(self):
         '''Hide the game window.
@@ -154,9 +129,75 @@ class GameWindow(object):
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=msg)
+        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def leave(self):
         pass
+
+    def add_players(self, names):
+        '''Add players to list of players and actualize the opponent_menu.
+        @param names: names of players
+        '''
+        # Add player to list and remove self
+        self.players += names
+        try:
+            del self.players[self.players.index(self.client_name)]
+        except ValueError:
+            pass
+        
+        # Reset currently selected and delete old options
+        self.opponent.set('')
+        self.opponent_menu['menu'].delete(0, 'end')
+        
+        # Insert new player list (tk._setit hooks them up to var)
+        for opp in self.players:
+            self.opponent_menu['menu'].add_command(label=opp,
+                command=Tkinter._setit(self.opponent, opp))
+    
+    def remove_player(self, name):
+        '''Remove player from list of players and actualize the opponent_menu.
+        @param name: name of player
+        '''
+        # Remove player from list
+        try:
+            del self.players[self.players.index(name)]
+        except:
+            return
+        
+        # Reset currently selected and delete old options
+        self.opponent.set('')
+        self.opponent_menu['menu'].delete(0, 'end')
+        
+        # Insert new player list (tk._setit hooks them up to var)
+        for opp in self.players:
+            self.opponent_menu['menu'].add_command(label=opp,
+                command=Tkinter._setit(self.opponent, opp))
+    
+    def get_dimensions(self):
+        '''Send get dimensions request to server.
+        '''
+        msg = common.REQ_GET_DIMENSIONS
+        self.channel.basic_publish(exchange='direct_logs',
+                                   routing_key=self.server_name + common.SEP +\
+                                       self.game_name,
+                                   properties=pika.BasicProperties(reply_to =\
+                                       self.client_queue),
+                                   body=msg)
+        LOG.debug('Sent message to server %s, game %s: %s',
+                  self.server_name, self.game_name, msg)
+    
+    def get_players(self):
+        '''Send get players request to server.
+        '''
+        msg = common.REQ_GET_PLAYERS
+        self.channel.basic_publish(exchange='direct_logs',
+                                   routing_key=self.server_name + common.SEP +\
+                                       self.game_name,
+                                   properties=pika.BasicProperties(reply_to =\
+                                       self.client_queue),
+                                   body=msg)
+        LOG.debug('Sent message to server %s, game %s: %s',
+                  self.server_name, self.game_name, msg)
     
     def on_response(self, ch, method, properties, body):
         '''React on server response.
@@ -172,3 +213,41 @@ class GameWindow(object):
             self.hide()
             self.events.put(('server', None, None))
         
+        # If response with dimensions, create the game fields
+        if msg_parts[0] == common.RSP_DIMENSIONS:
+            self.width = int(msg_parts[1])
+            self.height = int(msg_parts[2])
+            self.game_label = Tkinter.Label(self.frame_player, text="Game:")
+            self.game_label.grid(columnspan=self.width)
+            for i in range(self.height):
+                for j in range(self.width):
+                    Tkinter.Button(self.frame_player).grid(row=i+1, column=j)
+            
+            self.opponent = Tkinter.StringVar(self.frame_oponent)
+            self.opponent.set('')
+            self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, 
+                                                    self.opponent, '')
+            self.opponent_menu.grid(columnspan=self.width)
+            for i in range(self.height):
+                for j in range(self.width):
+                    Tkinter.Button(self.frame_oponent).grid(row=i+1, column=j)
+        
+        # If response with players, add players
+        if msg_parts[0] == common.RSP_LIST_PLAYERS:
+            self.add_players(msg_parts[1:])
+    
+    def on_event(self, ch, method, properties, body):
+        '''React on game event.
+        @param ch: pika.BlockingChannel
+        @param method: pika.spec.Basic.Deliver
+        @param properties: pika.spec.BasicProperties
+        @param body: str or unicode
+        '''
+        LOG.debug('Received event: %s', body)
+        msg_parts = body.split(common.SEP)
+        
+        if msg_parts[0] == common.E_NEW_PLAYER:
+            self.add_players(msg_parts[1:])
+
+        if msg_parts[0] == common.E_PLAYER_LEFT:
+            self.remove_player(msg_parts[1])

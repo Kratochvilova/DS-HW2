@@ -186,6 +186,7 @@ class LobbyWindow(object):
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=msg)
+        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def add_game(self, name, state):
         '''Add game session name into listbox.

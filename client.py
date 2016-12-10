@@ -78,6 +78,7 @@ if __name__ == '__main__':
     client_queue = channel.queue_declare(exclusive=True).method.queue
     server_advertisements = channel.queue_declare(exclusive=True).method.queue
     game_advertisements = channel.queue_declare(exclusive=True).method.queue
+    events_queue =  channel.queue_declare(exclusive=True).method.queue   
     
     # Queue for window control
     events = Queue.Queue()
@@ -87,7 +88,8 @@ if __name__ == '__main__':
                                  client_queue, events)
     lobby_window = LobbyWindow(channel, game_advertisements, 
                                client_queue, events, server_window)
-    game_window = GameWindow(channel, client_queue, events, server_window)
+    game_window = GameWindow(channel, client_queue, events_queue, events,
+                             server_window)
     
     server_window.lobby_window = lobby_window
     lobby_window.game_window = game_window
