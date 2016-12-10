@@ -117,6 +117,11 @@ class GameWindow(object):
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.client_queue,
                                   routing_key=self.client_queue)
+        self.channel.queue_unbind(exchange='direct_logs',
+                                  queue=self.events_queue,
+                                  routing_key=self.server_name + common.SEP +\
+                                     self.game_name + common.SEP +\
+                                  common.KEY_GAME_EVENTS)
         # Stop consuming
         if threading.current_thread() == self.listening_thread:
             self.channel.stop_consuming()
@@ -135,11 +140,10 @@ class GameWindow(object):
         LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def leave(self):
-        msg = common.SEP.join([common.REQ_LEAVE_GAME, self.game_name, 
-                               self.client_name])
+        msg = common.SEP.join([common.REQ_LEAVE_GAME, self.client_name])
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name + common.SEP +\
-                                       common.KEY_GAMES,
+                                       self.game_name,
                                    properties=pika.BasicProperties(reply_to =\
                                        self.client_queue),
                                    body=msg)

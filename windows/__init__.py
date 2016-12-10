@@ -5,13 +5,17 @@ LOG.setLevel(logging.DEBUG)
 import threading
 from time import sleep
 
+counter = 0
+
 def listen(channel, owner=None):
+    global counter
     def tmp_listen():
         LOG.debug('LISTEN start, owner: %s', owner)
         channel.start_consuming()
         LOG.debug('LISTEN end, owner: %s', owner)
 
-    t = threading.Thread(target=tmp_listen, name='Listening on channel')
+    t = threading.Thread(target=tmp_listen, name='Listen-%d'%counter)
+    counter +=1
     t.setDaemon(True)
     t.start()
     return t

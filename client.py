@@ -12,6 +12,7 @@ LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
 import common
+from windows import thread_printing
 from windows.server import ServerWindow
 from windows.lobby import LobbyWindow
 from windows.game import GameWindow
@@ -104,6 +105,8 @@ if __name__ == '__main__':
     t_control.setDaemon(True)
     t_control.start()
     
+    #thread_printing()
+
     try:
         server_window.root.mainloop()
     except KeyboardInterrupt as e:

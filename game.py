@@ -6,9 +6,11 @@ Created on Sat Dec 10 12:54:37 2016
 """
 # Imports----------------------------------------------------------------------
 import common
+import random
 # Logging ---------------------------------------------------------------------
 import logging
 LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
 # Classes ---------------------------------------------------------------------
 class Game():
     '''Game session.
@@ -37,6 +39,12 @@ class Game():
         self.channel.basic_consume(self.process_request,
                                    queue=self.game_queue,
                                    no_ack=True)
+    
+    def __del__(self):
+        self.channel.queue_unbind(exchange='direct_logs',
+                                  queue=self.game_queue,
+                                  routing_key=self.server_name + common.SEP +\
+                                      self.name)
         
     def process_request(self, ch, method, properties, body):
         '''Process game request.
@@ -50,6 +58,39 @@ class Game():
         msg_parts = body.split(common.SEP)
         response = None
         
+        # Leave game request
+        if msg_parts[0] == common.REQ_LEAVE_GAME:
+            if len(msg_parts) != 2:
+                response = common.RSP_INVALID_REQUEST
+            else:
+                try:
+                    self.players.remove(msg_parts[1])
+                except KeyError:
+                    pass
+                response = common.RSP_GAME_LEFT
+                # Send event that player left
+                msg = common.E_PLAYER_LEFT + common.SEP + msg_parts[1]
+                self.channel.basic_publish(exchange='direct_logs',
+                                       routing_key=self.server_name +\
+                                           common.SEP + self.name +\
+                                           common.SEP + common.KEY_GAME_EVENTS,
+                                       body=msg)
+                LOG.debug('Sent game event: %s', msg)
+                if len(self.players) == 0:
+                    # TODO: destroy game
+                    pass
+                elif self.owner == msg_parts[1]:
+                    new_owner = random.choice(list(self.players))
+                    self.owner = new_owner
+                    # Send event that owner changed
+                    msg = common.E_NEW_OWNER + common.SEP + new_owner
+                    self.channel.basic_publish(exchange='direct_logs',
+                                               routing_key=self.server_name +\
+                                                   common.SEP + self.name +\
+                                                   common.SEP +\
+                                                   common.KEY_GAME_EVENTS,
+                                               body=msg)
+                                               
         # Get dimensions request
         if msg_parts[0] == common.REQ_GET_DIMENSIONS:
             response = common.SEP.join([common.RSP_DIMENSIONS,

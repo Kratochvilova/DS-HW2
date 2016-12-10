@@ -183,8 +183,8 @@ class LobbyWindow(object):
         msg = common.REQ_DISCONNECT + common.SEP + self.client_name
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
+                                   properties=pika.BasicProperties(
+                                       reply_to = self.client_queue),
                                    body=msg)
         LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     

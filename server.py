@@ -17,7 +17,6 @@ from argparse import ArgumentParser
 from time import sleep
 import threading
 import pika
-import random
 # Constants -------------------------------------------------------------------
 ___NAME = 'Battleship Game Client'
 ___VER = '0.1.0.0'
@@ -38,8 +37,7 @@ class GameList():
         self.games_queue = channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.games_queue,
-                                routing_key=server_name +\
-                                    common.SEP +\
+                                routing_key=server_name + common.SEP +\
                                     common.KEY_GAMES)
         self.channel.basic_consume(self.process_request,
                                    queue=self.games_queue,
@@ -52,6 +50,7 @@ class GameList():
         @param width: width of field of game
         @param height: height of field of game
         '''
+        # TODO: create in new thread
         game = Game(self, self.channel, self.server_name, name, owner, width, height)
         self.games[name] = game
         self.channel.basic_publish(exchange='direct_logs',
@@ -142,40 +141,6 @@ class GameList():
                                        body=msg)
                 LOG.debug('Sent game event: %s', msg)
         
-        # Leave game request
-        if msg_parts[0] == common.REQ_LEAVE_GAME:
-            if len(msg_parts) != 3 or msg_parts[1].strip() == '' or\
-                msg_parts[2].strip() == '' :
-                response = common.RSP_INVALID_REQUEST
-            elif msg_parts[1] not in self.games:
-                response = common.RSP_NAME_DOESNT_EXIST
-            else:
-                try:
-                    self.games[msg_parts[1]].players.remove(msg_parts[2])
-                except KeyError:
-                    pass
-                response = common.RSP_GAME_LEFT + common.SEP + msg_parts[1]
-                # Send event that player left
-                msg = common.E_PLAYER_LEFT + common.SEP + msg_parts[2]
-                self.channel.basic_publish(exchange='direct_logs',
-                                       routing_key=self.server_name +\
-                                           common.SEP + msg_parts[1] +\
-                                           common.SEP + common.KEY_GAME_EVENTS,
-                                       body=msg)
-                LOG.debug('Sent game event: %s', msg)
-                if len(self.games[msg_parts[1]].players) == 0:
-                    del self.games[msg_parts[1]]
-                elif self.games[msg_parts[1]].owner == msg_parts[2]:
-                    new_owner = random.choice(self.games[msg_parts[1]].players)
-                    self.games[msg_parts[1]].owner = new_owner
-                    # Send event that owner changed
-                    msg = common.E_NEW_OWNER + common.SEP + new_owner
-                    self.channel.basic_publish(exchange='direct_logs',
-                                               routing_key=self.server_name +\
-                                                   common.SEP + msg_parts[1] +\
-                                                   common.SEP +\
-                                                   common.KEY_GAME_EVENTS,
-                                               body=msg)
         # Sending response
         ch.basic_publish(exchange='direct_logs',
                          routing_key=properties.reply_to,
