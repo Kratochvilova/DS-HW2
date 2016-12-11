@@ -10,6 +10,7 @@ from . import listen
 import threading
 import pika
 import Tkinter
+import tkMessageBox
 # Logging ---------------------------------------------------------------------
 import logging
 LOG = logging.getLogger(__name__)
@@ -56,7 +57,11 @@ class GameWindow(object):
         self.client_name = None
         self.game_name = None
         self.is_owner = False
+        
+        # Attributes of the game
         self.players = set()
+        self.players_ready = set()
+        self.on_turn = None
         
         # Queue of events for window control
         self.events = events
@@ -211,7 +216,7 @@ class GameWindow(object):
         # Insert new player list (tk._setit hooks them up to var)
         for opp in self.players:
             self.opponent_menu['menu'].add_command(label=opp,
-                command=Tkinter._setit(self.opponent, opp))
+                command=lambda opp=opp: self.opponent_selected(opp))
     
     def remove_player(self, name):
         '''Remove player from list of players and actualize the opponent_menu.
@@ -258,8 +263,36 @@ class GameWindow(object):
         LOG.debug('Sent message to server %s, game %s: %s',
                   self.server_name, self.game_name, msg)
     
-    def start_game(self):
+    def opponent_selected(self, name):
+        '''When opponent is selected, either ready indicator should appear 
+        (if in the stage of positioning ships), or the field should actualize
+        (if playing).
+        @param name: name of the selected opponent
+        '''
+        if self.on_turn == None:
+            if name in self.players_ready:
+                label = 'Ready'
+            else:
+                label = 'Not ready'
+            
+            self.ready_label_op = Tkinter.Label(self.frame_oponent, text=label)
+            self.ready_label_op.grid(row=self.height+2, columnspan=self.width)
+        else:
+            # TODO: actualize opponent field
+            pass
+    
+    def kick_out(self):
         pass
+    
+    def start_game(self):
+        '''Check if all players are ready and start the game.
+        '''
+        if self.players.issubset(self.players_ready) and\
+            self.client_name in self.players_ready:
+            # TODO: start the game
+            pass
+        else:
+            tkMessageBox.showinfo('Game start', 'Not all players are ready')
     
     def on_response(self, ch, method, properties, body):
         '''React on server response.
@@ -295,6 +328,10 @@ class GameWindow(object):
                 for j in range(self.width):
                     b = GameButton(self.frame_player, i+1, j, 'player', self)
                     b.grid(row=i+1, column=j)
+
+            self.ready_label = Tkinter.Label(self.frame_player,
+                                             text='Not ready')
+            self.ready_label.grid(row=self.height+2, columnspan=self.width)            
             
             if self.is_owner:
                 self.button_start = Tkinter.Button(self.frame_player, 
@@ -306,13 +343,21 @@ class GameWindow(object):
             # Oponent game field
             self.opponent = Tkinter.StringVar(self.frame_oponent)
             self.opponent.set('')
-            self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, 
+            self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent,
                                                     self.opponent, '')
             self.opponent_menu.grid(columnspan=self.width)
+
             for i in range(self.height):
                 for j in range(self.width):
                     b = GameButton(self.frame_oponent, i+1, j, 'opponent',self)
                     b.grid(row=i+1, column=j)
+            
+            if self.is_owner:
+                self.button_start = Tkinter.Button(self.frame_oponent, 
+                                                   text="Kick out", 
+                                                   command=self.start_game)
+                self.button_start.grid(row=self.height+3,
+                                       columnspan=self.width)
         
         # If response with players, add players
         if msg_parts[0] == common.RSP_LIST_PLAYERS:
@@ -337,10 +382,17 @@ class GameWindow(object):
         if msg_parts[0] == common.E_NEW_OWNER:
             if msg_parts[1] == self.client_name:
                 if not self.is_owner:
+                    # Display owner-specific widgets
                     self.button_start = Tkinter.Button(self.frame_player, 
                                                        text="Start game", 
                                                        command=self.start_game)
                     self.button_start.grid(row=self.height+2,
                                            columnspan=self.width)
+                                           
+                    self.button_kick = Tkinter.Button(self.frame_oponent, 
+                                                      text="Kick out", 
+                                                      command=self.kick_out)
+                    self.button_kick.grid(row=self.height+3,
+                                          columnspan=self.width)
                 self.is_owner = 1
             
