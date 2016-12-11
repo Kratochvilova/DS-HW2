@@ -6,9 +6,8 @@ Created on Tue Dec  7 16:27:21 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen
+from . import listen, send_request
 import threading
-import pika
 import Tkinter
 import tkMessageBox
 # Logging ---------------------------------------------------------------------
@@ -180,13 +179,8 @@ class LobbyWindow(object):
     def disconnect(self):
         '''Disconnect from server.
         '''
-        msg = common.REQ_DISCONNECT + common.SEP + self.client_name
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name,
-                                   properties=pika.BasicProperties(
-                                       reply_to = self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+        send_request(self.channel, [common.REQ_DISCONNECT, self.client_name],
+                     [self.server_name], self.client_queue)
     
     def add_game(self, name, state):
         '''Add game session name into listbox.
@@ -242,24 +236,12 @@ class LobbyWindow(object):
         '''Send requests to server to get list of all game sessions.
         '''
         # Sending request to get list of opened games
-        msg = common.REQ_GET_LIST_OPENED
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + common.SEP +\
-                                       common.KEY_GAMES,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+        send_request(self.channel, [common.REQ_GET_LIST_OPENED],
+                     [self.server_name, common.KEY_GAMES], self.client_queue)
         
         # Sending request to get list of closed games
-        msg = common.REQ_GET_LIST_CLOSED
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + common.SEP +\
-                                       common.KEY_GAMES,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+        send_request(self.channel, [common.REQ_GET_LIST_CLOSED],
+                     [self.server_name, common.KEY_GAMES], self.client_queue)
     
     def create_game(self):
         '''Send game creation request to server.
@@ -272,15 +254,10 @@ class LobbyWindow(object):
         height = self.height_entry.get()
         
         # Sending request to create game
-        msg = common.SEP.join([common.REQ_CREATE_GAME, gamename, 
-                               self.client_name, str(width), str(height)])
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + common.SEP +\
-                                       common.KEY_GAMES,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+        send_request(self.channel,
+                     [common.REQ_CREATE_GAME, gamename, self.client_name,
+                      str(width), str(height)],
+                     [self.server_name, common.KEY_GAMES], self.client_queue)
     
     def join_game(self):
         '''Send join game request to server.
@@ -290,15 +267,9 @@ class LobbyWindow(object):
         gamename = self.listbox_opened.get(self.listbox_opened.curselection())
         
         # Sending request to create game
-        msg = common.SEP.join([common.REQ_JOIN_GAME, gamename,
-                               self.client_name])
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + common.SEP +\
-                                       common.KEY_GAMES,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+        send_request(self.channel,
+                     [common.REQ_JOIN_GAME, gamename, self.client_name],
+                     [self.server_name, common.KEY_GAMES], self.client_queue)
 
     def spectate_game(self):
         pass

@@ -6,9 +6,8 @@ Created on Tue Dec  6 21:29:21 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen
+from . import listen, send_request
 import threading
-import pika
 import Tkinter
 import tkMessageBox
 import sys
@@ -165,13 +164,8 @@ class ServerWindow(object):
             return
         
         # Sending connect request
-        message = common.REQ_CONNECT + common.SEP + username
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=server_name,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=message)
-        LOG.debug('Sent message to server %s: %s', server_name, message)
+        send_request(self.channel, [common.REQ_CONNECT, username],
+                     [server_name], self.client_queue)
 
     def on_response(self, ch, method, properties, body):
         '''React on server response about connecting.

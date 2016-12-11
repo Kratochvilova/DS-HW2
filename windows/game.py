@@ -6,9 +6,8 @@ Created on Fri Dec  9 20:55:58 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen
+from . import listen, send_request
 import threading
-import pika
 import Tkinter
 import tkMessageBox
 # Logging ---------------------------------------------------------------------
@@ -112,6 +111,9 @@ class GameWindow(object):
         self.on_turn = None
         self.ships_remaining = None
         
+        # Fields
+        self.buttons = {}
+        
         # Queue of events for window control
         self.events = events
         
@@ -177,8 +179,11 @@ class GameWindow(object):
         
         # Get field dimensions and players
         self.reset_setting()
-        self.get_dimensions()
-        self.get_players()
+        self.send_simple_request(common.REQ_GET_DIMENSIONS)
+        self.send_simple_request(common.REQ_GET_PLAYERS)
+        self.send_simple_request(common.REQ_GET_PLAYERS_READY)
+        self.send_simple_request(common.REQ_GET_TURN)
+        self.get_fields_from_server()
 
     def hide(self):
         '''Hide the game window.
@@ -204,30 +209,28 @@ class GameWindow(object):
             self.channel.stop_consuming()
         else:
             LOG.error('LobbyWindow.on_hide called from non-listening thread.')
-    
+
     def disconnect(self):
         '''Disconnect from server.
         '''
-        msg = common.REQ_DISCONNECT + common.SEP + self.client_name
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+        send_request(self.channel, [common.REQ_DISCONNECT, self.client_name],
+                     [self.server_name], self.client_queue)
     
     def leave(self):
         '''Leave game session.
         '''
-        msg = common.SEP.join([common.REQ_LEAVE_GAME, self.client_name])
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + common.SEP +\
-                                       self.game_name,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s: %s', self.server_name, msg)
+        send_request(self.channel, [common.REQ_LEAVE_GAME, self.client_name], 
+                     [self.server_name, self.game_name], self.client_queue)
 
+    def send_simple_request(self, request):
+        '''Gend request to get info from server
+        '''
+        send_request(self.channel, [request],
+                     [self.server_name, self.game_name], self.client_queue)
+    
+    def get_fields_from_server(self):
+        pass
+    
     def reset_setting(self):
         '''Resets frames, dimensions, list of players
         '''
@@ -243,11 +246,13 @@ class GameWindow(object):
         
         self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, '', '')
         
-        # Reset dimensions and list of players
+        # Reset game attributes
         self.width = None
         self.height = None
-        self.ships_remaining = None
+        self.is_owner = False
         self.players = set()
+        self.on_turn = None
+        self.ships_remaining = None
 
     def set_setting(self, width, height, ships):
         '''Sets all widgets.
@@ -258,16 +263,18 @@ class GameWindow(object):
         # Set dimensions
         self.width = int(width)
         self.height = int(height)
+        
+        # Player frame
         self.game_label = Tkinter.Label(self.frame_player,
                                         text=self.client_name)
         self.game_label.grid(columnspan=self.width)
         
-        self.player_buttons = []
+        self.buttons[self.client_name] = {}
         for i in range(self.height):
             for j in range(self.width):
                 b = GameButton(self.frame_player, i+1, j, 'player', self)
                 b.grid(row=i+1, column=j)
-                self.player_buttons.append(b)
+                self.buttons[self.client_name][(i+1, j)] = b
 
         self.ready_label = Tkinter.Label(self.frame_player,
                                          text='Ships remaining: %s' %\
@@ -286,7 +293,7 @@ class GameWindow(object):
                                                command=self.start_game)
             self.button_start.grid(row=self.height+4, columnspan=self.width)
             
-        # Oponent game field
+        # Oponent frame
         self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, '', '')
         self.opponent_menu.grid(columnspan=self.width)
 
@@ -342,32 +349,6 @@ class GameWindow(object):
             self.opponent_menu['menu'].add_command(label=opp,
                 command=Tkinter._setit(self.opponent, opp))
     
-    def get_dimensions(self):
-        '''Send get dimensions request to server.
-        '''
-        msg = common.REQ_GET_DIMENSIONS
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + common.SEP +\
-                                       self.game_name,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s, game %s: %s',
-                  self.server_name, self.game_name, msg)
-    
-    def get_players(self):
-        '''Send get players request to server.
-        '''
-        msg = common.REQ_GET_PLAYERS
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + common.SEP +\
-                                       self.game_name,
-                                   properties=pika.BasicProperties(reply_to =\
-                                       self.client_queue),
-                                   body=msg)
-        LOG.debug('Sent message to server %s, game %s: %s',
-                  self.server_name, self.game_name, msg)
-    
     def opponent_selected(self, name):
         '''When opponent is selected, either ready indicator should appear 
         (if in the stage of positioning ships), or the field should actualize
@@ -407,17 +388,12 @@ class GameWindow(object):
                  self.ships_remaining)
         else:
             # Send request to server
-            ships = self.get_ships(self.player_buttons)
-            msg = common.SEP.join([common.REQ_GET_READY,
-                                   self.client_name] + ships)
-            self.channel.basic_publish(exchange='direct_logs',
-                routing_key=self.server_name + common.SEP + self.game_name,
-                properties=pika.BasicProperties(reply_to = self.client_queue),
-                body=msg)
-            LOG.debug('Sent message to server %s, game %s: %s',
-                      self.server_name, self.game_name, msg)
+            ships = self.get_ships(self.buttons[self.client_name].values())
+            send_request(self.channel,
+                         [common.REQ_SET_READY, self.client_name] + ships,
+                         [self.server_name, self.game_name], self.client_queue)
             # Color the button
-            self.button_ready.config(bg='#68c45c', activebackground = '#68c45c')
+            self.button_ready.config(bg='#68c45c',activebackground = '#68c45c')
         
     def start_game(self):
         '''Check if all players are ready and start the game.
@@ -451,15 +427,29 @@ class GameWindow(object):
             self.events.put(('lobby', None, 
                              [self.server_name, self.client_name]))
         
-        # If response with dimensions, create the game fields
+        # If got dimensions, create the game fields
         if msg_parts[0] == common.RSP_DIMENSIONS:
             if self.ships_remaining is not None:
                 return
             self.set_setting(*msg_parts[1:])
         
-        # If response with players, add players
+        # If got list of players, add players
         if msg_parts[0] == common.RSP_LIST_PLAYERS:
             self.add_players(msg_parts[1:])
+        
+        # If got list of players ready, add to palyers_ready
+        if msg_parts[0] == common.RSP_LIST_PLAYERS_READY:
+            self.players_ready = set(msg_parts[1:])
+            if self.client_name in self.players_ready:
+                self.button_ready.config(bg='#68c45c',
+                                         activebackground = '#68c45c')
+        
+        # If got current turn info, update on_turn
+        if msg_parts[0] == common.RSP_TURN:
+            if len(msg_parts) == 1:
+                self.on_turn = None
+            else:
+                self.on_turn = msg_parts[1]
         
         # If response with ready, get ready
         if msg_parts[0] == common.RSP_READY:

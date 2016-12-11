@@ -30,7 +30,8 @@ class Game(threading.Thread):
         self.ship_number = int(self.width) * int(self.height) / 3
         self.owner = owner
         self.players = {}
-        self.players[self.owner] = []
+        self.players[self.owner] = {}
+        self.on_turn = None
         
         # Communication
         self.server_name = server_args.name
@@ -49,7 +50,8 @@ class Game(threading.Thread):
                 host=self.host, port=self.port))
         self.channel = self.connection.channel()
         self.channel.exchange_declare(exchange='direct_logs', type='direct')
-        self.game_queue = self.channel.queue_declare(exclusive=True).method.queue
+        self.game_queue =\
+            self.channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_queue,
                                 routing_key=self.server_name + common.SEP +\
@@ -58,7 +60,8 @@ class Game(threading.Thread):
                                    queue=self.game_queue,
                                    no_ack=True)
         
-        self.control_queue = self.channel.queue_declare(exclusive=True).method.queue
+        self.control_queue =\
+            self.channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.control_queue,
                                 routing_key=self.control_queue)
@@ -104,7 +107,7 @@ class Game(threading.Thread):
         '''
         for ship in ships:
             ship_position = ship.split(common.BUTTON_SEP)
-            self.players[player].append((ship_position[0], ship_position[1]))
+            self.players[player][(ship_position[0], ship_position[1])] = 'ship'
 
     def process_request(self, ch, method, properties, body):
         '''Process game request.
@@ -116,7 +119,7 @@ class Game(threading.Thread):
         LOG.debug('Processing game request.')
         LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.SEP)
-        response = None
+        response = ''
         
         # Leave game request
         if msg_parts[0] == common.REQ_LEAVE_GAME:
@@ -163,8 +166,21 @@ class Game(threading.Thread):
             response = common.RSP_LIST_PLAYERS + common.SEP +\
                 common.SEP.join(self.players)
 
-        # Get ready request
-        if msg_parts[0] == common.REQ_GET_READY:
+        # Get players ready request
+        if msg_parts[0] == common.REQ_GET_PLAYERS_READY:
+            ready = [p for p in self.players if self.players[p] != {}]
+            response = common.RSP_LIST_PLAYERS_READY + common.SEP +\
+                common.SEP.join(ready)
+        
+        # Get turn request
+        if msg_parts[0] == common.REQ_GET_TURN:
+            if self.on_turn == None:
+                response = common.RSP_TURN
+            else:
+                response = common.RSP_TURN + common.SEP + self.on_turn
+
+        # Set ready request
+        if msg_parts[0] == common.REQ_SET_READY:
             if not self.check_ships(msg_parts[2:]):
                 response = common.RSP_SHIPS_INCORRECT
             else:
