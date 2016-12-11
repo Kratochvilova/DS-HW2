@@ -14,6 +14,29 @@ import Tkinter
 import logging
 LOG = logging.getLogger(__name__)
 # Classes ---------------------------------------------------------------------
+class GameButton(Tkinter.Button):
+    '''Button in the game field.
+    '''
+    def __init__(self, master, row, column, parent, game_window):
+        '''Init GameButton.
+        @param master: master Tkinter widget
+        @param row: row in the field
+        @param column: column in the field
+        @param parent: String, player or opponent - type of game field
+        @param game_window: GameWindow
+        '''
+        Tkinter.Button.__init__(self, master, command=self.button_pressed)
+        self.parent = parent
+        self.game_window = game_window
+
+    def button_pressed(self):
+        '''Reaction on pressing the button.
+        '''
+        if self.parent == 'player':
+            self.config(bg='blue')
+        if self.parent == 'opponent':
+            self.config(bg='red')
+
 class GameWindow(object):
     '''Window for displaying game.
     '''
@@ -270,7 +293,8 @@ class GameWindow(object):
             self.game_label.grid(columnspan=self.width)
             for i in range(self.height):
                 for j in range(self.width):
-                    Tkinter.Button(self.frame_player).grid(row=i+1, column=j)
+                    b = GameButton(self.frame_player, i+1, j, 'player', self)
+                    b.grid(row=i+1, column=j)
             
             if self.is_owner:
                 self.button_start = Tkinter.Button(self.frame_player, 
@@ -287,7 +311,8 @@ class GameWindow(object):
             self.opponent_menu.grid(columnspan=self.width)
             for i in range(self.height):
                 for j in range(self.width):
-                    Tkinter.Button(self.frame_oponent).grid(row=i+1, column=j)
+                    b = GameButton(self.frame_oponent, i+1, j, 'opponent',self)
+                    b.grid(row=i+1, column=j)
         
         # If response with players, add players
         if msg_parts[0] == common.RSP_LIST_PLAYERS:
