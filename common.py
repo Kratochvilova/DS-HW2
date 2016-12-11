@@ -49,17 +49,19 @@ RSP_NAME_DOESNT_EXIST = 'name doesnt exist'
 REQ_LEAVE_GAME = 'leave game'
 REQ_GET_DIMENSIONS = 'get dimensions'
 REQ_GET_PLAYERS = 'get players'
-REQ_POSITION_SHIP = 'position ship'
+REQ_GET_READY = 'get ready'
 # Responses
 RSP_GAME_LEFT = 'game left'
 RSP_DIMENSIONS = 'dimensions'
 RSP_LIST_PLAYERS = 'list players'
-RSP_SHIP_POSITIONED = 'ship positioned'
+RSP_READY = 'ready'
+RSP_SHIPS_INCORRECT = 'ships incorrect'
 
 # Game events -----------------------------------------------------------------
 E_NEW_PLAYER = 'new player'
 E_PLAYER_LEFT = 'player left'
 E_NEW_OWNER = 'new owner'
+E_PLAYER_READY = 'player ready'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'
@@ -67,3 +69,4 @@ RSP_INVALID_REQUEST = 'invalid request'
 
 # Separator -------------------------------------------------------------------
 SEP = ':'
+BUTTON_SEP = ','

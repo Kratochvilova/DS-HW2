@@ -29,8 +29,8 @@ class Game(threading.Thread):
         self.height = height
         self.ship_number = int(self.width) * int(self.height) / 3
         self.owner = owner
-        self.players = set()
-        self.players.add(owner)
+        self.players = {}
+        self.players[self.owner] = []
         
         # Communication
         self.server_name = server_args.name
@@ -84,6 +84,27 @@ class Game(threading.Thread):
         game event to client
         '''
         self.ready_event.wait()
+    
+    def check_ships(self, ships):
+        if len(ships) != self.ship_number:
+            return False
+        
+        for ship in ships:
+            ship_position = ship.split(common.BUTTON_SEP)
+            if ship_position[0] < 0 or ship_position[1] < 0:
+                return False
+            if ship_position[0] > self.height or ship_position[1] > self.width:
+                return False
+        
+        return True
+    
+    def add_ships(self, player, ships):
+        '''Add ships to player.
+        @param ships: list of tuples (row, column)
+        '''
+        for ship in ships:
+            ship_position = ship.split(common.BUTTON_SEP)
+            self.players[player].append((ship_position[0], ship_position[1]))
 
     def process_request(self, ch, method, properties, body):
         '''Process game request.
@@ -103,7 +124,7 @@ class Game(threading.Thread):
                 response = common.RSP_INVALID_REQUEST
             else:
                 try:
-                    self.players.remove(msg_parts[1])
+                    del self.players[msg_parts[1]]
                 except KeyError:
                     pass
                 response = common.RSP_GAME_LEFT
@@ -120,7 +141,7 @@ class Game(threading.Thread):
                     self.channel.stop_consuming()
                 
                 elif self.owner == msg_parts[1]:
-                    new_owner = random.choice(list(self.players))
+                    new_owner = random.choice(self.players)
                     self.owner = new_owner
                     # Send event that owner changed
                     msg = common.E_NEW_OWNER + common.SEP + new_owner
@@ -141,6 +162,14 @@ class Game(threading.Thread):
         if msg_parts[0] == common.REQ_GET_PLAYERS:
             response = common.RSP_LIST_PLAYERS + common.SEP +\
                 common.SEP.join(self.players)
+
+        # Get ready request
+        if msg_parts[0] == common.REQ_GET_READY:
+            if not self.check_ships(msg_parts[2:]):
+                response = common.RSP_SHIPS_INCORRECT
+            else:
+                self.add_ships(msg_parts[1], msg_parts[2:])
+                response = common.RSP_READY
 
         # Sending response
         ch.basic_publish(exchange='direct_logs',

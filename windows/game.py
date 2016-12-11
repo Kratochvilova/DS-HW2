@@ -30,34 +30,61 @@ class GameButton(Tkinter.Button):
         self.parent = parent
         self.game_window = game_window
         
+        self.row = row - 1
+        self.column = column
+        
+        self.color = None
+        
         # Colors
-        self.water = '#675BEB'
-        self.ship = '#A56721'
-        self.hit_ship = '#C00000'
-        self.unknown = '#E4E4E4'
+        self.colors = {
+            'water': '#675BEB',
+            'ship': '#A56721',
+            'hit ship': '#C00000',
+            'unknown': '#E4E4E4'}
         
         if self.parent == 'player':
-            self.config(bg=self.water, activebackground=self.water)
+            self.change_color('water')
         if self.parent == 'opponent':
-            self.config(bg=self.unknown, activebackground=self.unknown)
+            self.change_color('unknown')
 
+    def change_color(self, color):
+        self.color = color
+        self.config(bg=self.colors[color],
+                    activebackground=self.colors[color])
+    
     def button_pressed(self):
         '''Reaction on pressing the button.
         '''
+        LOG.debug('Pressed button on position: %s, %s', self.row, self.column)
         # If in positioning ships phase
-        if self.game_window.on_turn == None:
-            if self.parent == 'opponent' or\
-                self.game_window.ships_remaining == 0 or\
-                self.cget('bg') != self.water:
+        if self.game_window.client_name not in self.game_window.players_ready:
+            if self.parent == 'opponent':
                 return
-            self.config(bg=self.ship, activebackground=self.ship)
-            self.game_window.ships_remaining -= 1
-            self.game_window.ready_label = Tkinter.Label(
-                self.game_window.frame_player, 
-                text='Ships remaining: %s' % self.game_window.ships_remaining)
-            self.game_window.ready_label.grid(
-                row=self.game_window.height+2,
-                columnspan=self.game_window.width)
+            
+            # Add ship
+            if self.color == 'water' and\
+                self.game_window.ships_remaining != 0:
+                self.change_color('ship')
+                self.game_window.ships_remaining -= 1
+                self.game_window.ready_label = Tkinter.Label(
+                    self.game_window.frame_player, 
+                    text='Ships remaining: %s' %\
+                        self.game_window.ships_remaining)
+                self.game_window.ready_label.grid(
+                    row=self.game_window.height+2,
+                    columnspan=self.game_window.width)
+            
+            # Remove ship
+            elif self.color == 'ship':
+                self.change_color('water')
+                self.game_window.ships_remaining += 1
+                self.game_window.ready_label = Tkinter.Label(
+                    self.game_window.frame_player, 
+                    text='Ships remaining: %s' %\
+                        self.game_window.ships_remaining)
+                self.game_window.ready_label.grid(
+                    row=self.game_window.height+2,
+                    columnspan=self.game_window.width)
 
 class GameWindow(object):
     '''Window for displaying game.
@@ -219,6 +246,7 @@ class GameWindow(object):
         # Reset dimensions and list of players
         self.width = None
         self.height = None
+        self.ships_remaining = None
         self.players = set()
 
     def set_setting(self, width, height, ships):
@@ -226,29 +254,37 @@ class GameWindow(object):
         '''
         # Set number of ships to position
         self.ships_remaining = int(ships)
-            
+        
         # Set dimensions
         self.width = int(width)
         self.height = int(height)
         self.game_label = Tkinter.Label(self.frame_player,
                                         text=self.client_name)
         self.game_label.grid(columnspan=self.width)
+        
+        self.player_buttons = []
         for i in range(self.height):
             for j in range(self.width):
                 b = GameButton(self.frame_player, i+1, j, 'player', self)
                 b.grid(row=i+1, column=j)
+                self.player_buttons.append(b)
 
         self.ready_label = Tkinter.Label(self.frame_player,
                                          text='Ships remaining: %s' %\
                                              self.ships_remaining)
         self.ready_label.grid(row=self.height+2, columnspan=self.width)
-            
+        
+        self.button_ready = Tkinter.Button(self.frame_player, text="Ready",
+                                           command=self.get_ready)
+        self.button_ready.grid(row=self.height+3, columnspan=self.width)
+        
         # Start button in case of owner
+        self.opponent_buttons = []
         if self.is_owner:
             self.button_start = Tkinter.Button(self.frame_player,
                                                text="Start game",
                                                command=self.start_game)
-            self.button_start.grid(row=self.height+3, columnspan=self.width)
+            self.button_start.grid(row=self.height+4, columnspan=self.width)
             
         # Oponent game field
         self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, '', '')
@@ -353,15 +389,46 @@ class GameWindow(object):
     def kick_out(self):
         pass
     
+    def get_ships(self, buttons):
+        result = []
+        for button in buttons:
+            if button.color == 'ship':
+                result.append(str(button.row) + common.BUTTON_SEP +\
+                              str(button.column))
+        return result
+    
+    def get_ready(self):
+        '''Confirm the ship positioning to the server.
+        '''
+        if self.client_name in self.players_ready:
+            return
+        elif self.ships_remaining != 0:
+             tkMessageBox.showinfo('Game', 'Ships remaining: %s' %\
+                 self.ships_remaining)
+        else:
+            # Send request to server
+            ships = self.get_ships(self.player_buttons)
+            msg = common.SEP.join([common.REQ_GET_READY,
+                                   self.client_name] + ships)
+            self.channel.basic_publish(exchange='direct_logs',
+                routing_key=self.server_name + common.SEP + self.game_name,
+                properties=pika.BasicProperties(reply_to = self.client_queue),
+                body=msg)
+            LOG.debug('Sent message to server %s, game %s: %s',
+                      self.server_name, self.game_name, msg)
+            # Color the button
+            self.button_ready.config(bg='#68c45c', activebackground = '#68c45c')
+        
     def start_game(self):
         '''Check if all players are ready and start the game.
         '''
         if self.players.issubset(self.players_ready) and\
             self.client_name in self.players_ready:
             # TODO: start the game
+            print('GAME STARTS!')
             pass
         else:
-            tkMessageBox.showinfo('Game start', 'Not all players are ready')
+            tkMessageBox.showinfo('Game', 'Not all players are ready')
     
     def on_response(self, ch, method, properties, body):
         '''React on server response.
@@ -393,6 +460,10 @@ class GameWindow(object):
         # If response with players, add players
         if msg_parts[0] == common.RSP_LIST_PLAYERS:
             self.add_players(msg_parts[1:])
+        
+        # If response with ready, get ready
+        if msg_parts[0] == common.RSP_READY:
+            self.players_ready.add(self.client_name)
     
     def on_event(self, ch, method, properties, body):
         '''React on game event.

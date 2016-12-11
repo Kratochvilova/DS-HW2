@@ -135,7 +135,7 @@ class GameList():
             elif msg_parts[2] not in self.clients.client_set:
                 response = common.RSP_PERMISSION_DENIED
             else:
-                self.games[msg_parts[1]].players.add(msg_parts[2])
+                self.games[msg_parts[1]].players[msg_parts[2]] = []
                 response = common.SEP.join([common.RSP_GAME_ENTERED, 
                                             msg_parts[1], '0'])
                 # Send event that new player was added
