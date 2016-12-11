@@ -29,14 +29,35 @@ class GameButton(Tkinter.Button):
         Tkinter.Button.__init__(self, master, command=self.button_pressed)
         self.parent = parent
         self.game_window = game_window
+        
+        # Colors
+        self.water = '#675BEB'
+        self.ship = '#A56721'
+        self.hit_ship = '#C00000'
+        self.unknown = '#E4E4E4'
+        
+        if self.parent == 'player':
+            self.config(bg=self.water, activebackground=self.water)
+        if self.parent == 'opponent':
+            self.config(bg=self.unknown, activebackground=self.unknown)
 
     def button_pressed(self):
         '''Reaction on pressing the button.
         '''
-        if self.parent == 'player':
-            self.config(bg='blue')
-        if self.parent == 'opponent':
-            self.config(bg='red')
+        # If in positioning ships phase
+        if self.game_window.on_turn == None:
+            if self.parent == 'opponent' or\
+                self.game_window.ships_remaining == 0 or\
+                self.cget('bg') != self.water:
+                return
+            self.config(bg=self.ship, activebackground=self.ship)
+            self.game_window.ships_remaining -= 1
+            self.game_window.ready_label = Tkinter.Label(
+                self.game_window.frame_player, 
+                text='Ships remaining: %s' % self.game_window.ships_remaining)
+            self.game_window.ready_label.grid(
+                row=self.game_window.height+2,
+                columnspan=self.game_window.width)
 
 class GameWindow(object):
     '''Window for displaying game.
@@ -62,6 +83,7 @@ class GameWindow(object):
         self.players = set()
         self.players_ready = set()
         self.on_turn = None
+        self.ships_remaining = None
         
         # Queue of events for window control
         self.events = events
@@ -192,10 +214,58 @@ class GameWindow(object):
         self.frame_oponent = Tkinter.Frame(self.frame, borderwidth=15)
         self.frame_oponent.pack()
         
+        self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, '', '')
+        
         # Reset dimensions and list of players
         self.width = None
         self.height = None
         self.players = set()
+
+    def set_setting(self, width, height, ships):
+        '''Sets all widgets.
+        '''
+        # Set number of ships to position
+        self.ships_remaining = int(ships)
+            
+        # Set dimensions
+        self.width = int(width)
+        self.height = int(height)
+        self.game_label = Tkinter.Label(self.frame_player,
+                                        text=self.client_name)
+        self.game_label.grid(columnspan=self.width)
+        for i in range(self.height):
+            for j in range(self.width):
+                b = GameButton(self.frame_player, i+1, j, 'player', self)
+                b.grid(row=i+1, column=j)
+
+        self.ready_label = Tkinter.Label(self.frame_player,
+                                         text='Ships remaining: %s' %\
+                                             self.ships_remaining)
+        self.ready_label.grid(row=self.height+2, columnspan=self.width)
+            
+        # Start button in case of owner
+        if self.is_owner:
+            self.button_start = Tkinter.Button(self.frame_player,
+                                               text="Start game",
+                                               command=self.start_game)
+            self.button_start.grid(row=self.height+3, columnspan=self.width)
+            
+        # Oponent game field
+        self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, '', '')
+        self.opponent_menu.grid(columnspan=self.width)
+
+        for i in range(self.height):
+            for j in range(self.width):
+                b = GameButton(self.frame_oponent, i+1, j, 'opponent',self)
+                b.grid(row=i+1, column=j)
+            
+        # Kick button in case of owner
+        if self.is_owner:
+            self.button_start = Tkinter.Button(self.frame_oponent, 
+                                               text="Kick out", 
+                                               command=self.start_game)
+            self.button_start.grid(row=self.height+3,
+                                   columnspan=self.width)
 
     def add_players(self, names):
         '''Add players to list of players and actualize the opponent_menu.
@@ -210,7 +280,7 @@ class GameWindow(object):
             pass
         
         # Reset currently selected and delete old options
-        self.opponent.set('')
+        self.opponent = ''
         self.opponent_menu['menu'].delete(0, 'end')
         
         # Insert new player list (tk._setit hooks them up to var)
@@ -229,7 +299,6 @@ class GameWindow(object):
             return
         
         # Reset currently selected and delete old options
-        self.opponent.set('')
         self.opponent_menu['menu'].delete(0, 'end')
         
         # Insert new player list (tk._setit hooks them up to var)
@@ -317,47 +386,9 @@ class GameWindow(object):
         
         # If response with dimensions, create the game fields
         if msg_parts[0] == common.RSP_DIMENSIONS:
-            if self.width is not None:
+            if self.ships_remaining is not None:
                 return
-            self.width = int(msg_parts[1])
-            self.height = int(msg_parts[2])
-            self.game_label = Tkinter.Label(self.frame_player,
-                                            text=self.client_name)
-            self.game_label.grid(columnspan=self.width)
-            for i in range(self.height):
-                for j in range(self.width):
-                    b = GameButton(self.frame_player, i+1, j, 'player', self)
-                    b.grid(row=i+1, column=j)
-
-            self.ready_label = Tkinter.Label(self.frame_player,
-                                             text='Not ready')
-            self.ready_label.grid(row=self.height+2, columnspan=self.width)            
-            
-            if self.is_owner:
-                self.button_start = Tkinter.Button(self.frame_player, 
-                                                   text="Start game", 
-                                                   command=self.start_game)
-                self.button_start.grid(row=self.height+2,
-                                       columnspan=self.width)
-            
-            # Oponent game field
-            self.opponent = Tkinter.StringVar(self.frame_oponent)
-            self.opponent.set('')
-            self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent,
-                                                    self.opponent, '')
-            self.opponent_menu.grid(columnspan=self.width)
-
-            for i in range(self.height):
-                for j in range(self.width):
-                    b = GameButton(self.frame_oponent, i+1, j, 'opponent',self)
-                    b.grid(row=i+1, column=j)
-            
-            if self.is_owner:
-                self.button_start = Tkinter.Button(self.frame_oponent, 
-                                                   text="Kick out", 
-                                                   command=self.start_game)
-                self.button_start.grid(row=self.height+3,
-                                       columnspan=self.width)
+            self.set_setting(*msg_parts[1:])
         
         # If response with players, add players
         if msg_parts[0] == common.RSP_LIST_PLAYERS:

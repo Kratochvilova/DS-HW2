@@ -27,6 +27,7 @@ class Game(threading.Thread):
         self.state = 'opened'
         self.width = width
         self.height = height
+        self.ship_number = int(self.width) * int(self.height) / 3
         self.owner = owner
         self.players = set()
         self.players.add(owner)
@@ -133,7 +134,8 @@ class Game(threading.Thread):
         # Get dimensions request
         if msg_parts[0] == common.REQ_GET_DIMENSIONS:
             response = common.SEP.join([common.RSP_DIMENSIONS,
-                                       self.width, self.height])
+                                       self.width, self.height,
+                                       str(self.ship_number)])
         
         # Get players request
         if msg_parts[0] == common.REQ_GET_PLAYERS:

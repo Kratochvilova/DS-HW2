@@ -49,10 +49,12 @@ RSP_NAME_DOESNT_EXIST = 'name doesnt exist'
 REQ_LEAVE_GAME = 'leave game'
 REQ_GET_DIMENSIONS = 'get dimensions'
 REQ_GET_PLAYERS = 'get players'
+REQ_POSITION_SHIP = 'position ship'
 # Responses
 RSP_GAME_LEFT = 'game left'
 RSP_DIMENSIONS = 'dimensions'
 RSP_LIST_PLAYERS = 'list players'
+RSP_SHIP_POSITIONED = 'ship positioned'
 
 # Game events -----------------------------------------------------------------
 E_NEW_PLAYER = 'new player'
