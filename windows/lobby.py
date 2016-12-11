@@ -73,7 +73,7 @@ class LobbyWindow(object):
             frame, text="Join", command=self.join_game)
         self.button_join.pack()
         
-        self.listbox_label = Tkinter.Label(frame, text="List of running games:")
+        self.listbox_label = Tkinter.Label(frame,text="List of running games:")
         self.listbox_label.pack()
         self.listbox_closed = Tkinter.Listbox(frame, width=40, height=10)
         self.listbox_closed.pack()
@@ -230,6 +230,7 @@ class LobbyWindow(object):
             self.remove_game(body, 'open')
             self.add_game(body, 'close')
         if key_parts[1] == common.KEY_GAME_END:
+            self.remove_game(body, 'open')
             self.remove_game(body, 'close')
 
     def get_games_list(self):

@@ -32,6 +32,7 @@ class Game(threading.Thread):
         self.players = {}
         self.players[self.owner] = {}
         self.on_turn = None
+        self.player_hits = {}
         
         # Communication
         self.server_name = server_args.name
@@ -94,9 +95,9 @@ class Game(threading.Thread):
         
         for ship in ships:
             ship_position = ship.split(common.BUTTON_SEP)
-            if ship_position[0] < 0 or ship_position[1] < 0:
-                return False
-            if ship_position[0] > self.height or ship_position[1] > self.width:
+            if int(ship_position[0]) < 0 or int(ship_position[1]) < 0 or\
+                int(ship_position[0]) > self.height or\
+                int(ship_position[1]) > self.width:
                 return False
         
         return True
@@ -108,6 +109,22 @@ class Game(threading.Thread):
         for ship in ships:
             ship_position = ship.split(common.BUTTON_SEP)
             self.players[player][(ship_position[0], ship_position[1])] = 'ship'
+
+    def get_fields(self, player):
+        '''Get field information for specific player.
+        @param player: player
+        '''
+        result = []
+        for position, value in self.players[player].items():
+            result.append(common.BUTTON_SEP.join([player, position[0],
+                                                 position[1], value]))
+        try:
+            for position, value in self.player_hits[player].items():
+                result.append(common.BUTTON_SEP.join([value[0], position[0],
+                                                     position[1], value[1]]))
+        except KeyError:
+            pass
+        return result
 
     def process_request(self, ch, method, properties, body):
         '''Process game request.
@@ -121,6 +138,25 @@ class Game(threading.Thread):
         msg_parts = body.split(common.SEP)
         response = ''
         
+        # Disconnect request
+        if msg_parts[0] == common.REQ_DISCONNECT:
+            response = common.RSP_DISCONNECTED
+            if len(self.players.keys()) == 1:
+                # Quit game
+                self.channel.stop_consuming()
+                self.game_list.remove_game(self.name)
+                
+            if self.owner == msg_parts[1]:
+                rest = [p for p in self.players.keys() if p != msg_parts[1]]
+                new_owner = random.choice(rest)
+                self.owner = new_owner
+                # Send event that owner changed
+                msg = common.E_NEW_OWNER + common.SEP + new_owner
+                self.channel.basic_publish(exchange='direct_logs',
+                                           routing_key=self.server_name +\
+                                               common.SEP +\
+                                               common.KEY_GAMES,
+                                           body=msg)
         # Leave game request
         if msg_parts[0] == common.REQ_LEAVE_GAME:
             if len(msg_parts) != 2:
@@ -139,12 +175,13 @@ class Game(threading.Thread):
                                            common.SEP + common.KEY_GAME_EVENTS,
                                        body=msg)
                 LOG.debug('Sent game event: %s', msg)
-                if len(self.players) == 0:
+                if len(self.players.keys()) == 0:
                     # Quit game
                     self.channel.stop_consuming()
+                    self.game_list.remove_game(self.name)
                 
                 elif self.owner == msg_parts[1]:
-                    new_owner = random.choice(self.players)
+                    new_owner = random.choice(self.players.keys())
                     self.owner = new_owner
                     # Send event that owner changed
                     msg = common.E_NEW_OWNER + common.SEP + new_owner
@@ -163,14 +200,13 @@ class Game(threading.Thread):
         
         # Get players request
         if msg_parts[0] == common.REQ_GET_PLAYERS:
-            response = common.RSP_LIST_PLAYERS + common.SEP +\
-                common.SEP.join(self.players)
+            response = common.SEP.join([common.RSP_LIST_PLAYERS] +\
+                                        self.players.keys())
 
         # Get players ready request
         if msg_parts[0] == common.REQ_GET_PLAYERS_READY:
             ready = [p for p in self.players if self.players[p] != {}]
-            response = common.RSP_LIST_PLAYERS_READY + common.SEP +\
-                common.SEP.join(ready)
+            response = common.SEP.join([common.RSP_LIST_PLAYERS_READY] + ready)
         
         # Get turn request
         if msg_parts[0] == common.REQ_GET_TURN:
@@ -178,6 +214,11 @@ class Game(threading.Thread):
                 response = common.RSP_TURN
             else:
                 response = common.RSP_TURN + common.SEP + self.on_turn
+        
+        # Get field request
+        if msg_parts[0] == common.REQ_GET_FIELDS:
+            response = common.SEP.join([common.RSP_FIELDS] +\
+                                        self.get_fields(msg_parts[1]))
 
         # Set ready request
         if msg_parts[0] == common.REQ_SET_READY:

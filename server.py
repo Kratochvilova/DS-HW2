@@ -135,17 +135,18 @@ class GameList():
             elif msg_parts[2] not in self.clients.client_set:
                 response = common.RSP_PERMISSION_DENIED
             else:
-                self.games[msg_parts[1]].players[msg_parts[2]] = {}
+                if msg_parts[2] not in self.games[msg_parts[1]].players:
+                    self.games[msg_parts[1]].players[msg_parts[2]] = {}
+                    # Send event that new player was added
+                    msg = common.E_NEW_PLAYER + common.SEP + msg_parts[2]
+                    self.channel.basic_publish(exchange='direct_logs',
+                                           routing_key=self.server_name +\
+                                               common.SEP + msg_parts[1] +\
+                                               common.SEP + common.KEY_GAME_EVENTS,
+                                           body=msg)
+                    LOG.debug('Sent game event: %s', msg)
                 response = common.SEP.join([common.RSP_GAME_ENTERED, 
                                             msg_parts[1], '0'])
-                # Send event that new player was added
-                msg = common.E_NEW_PLAYER + common.SEP + msg_parts[2]
-                self.channel.basic_publish(exchange='direct_logs',
-                                       routing_key=self.server_name +\
-                                           common.SEP + msg_parts[1] +\
-                                           common.SEP + common.KEY_GAME_EVENTS,
-                                       body=msg)
-                LOG.debug('Sent game event: %s', msg)
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',

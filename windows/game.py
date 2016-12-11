@@ -183,7 +183,7 @@ class GameWindow(object):
         self.send_simple_request(common.REQ_GET_PLAYERS)
         self.send_simple_request(common.REQ_GET_PLAYERS_READY)
         self.send_simple_request(common.REQ_GET_TURN)
-        self.get_fields_from_server()
+        self.send_name_request(common.REQ_GET_FIELDS)
 
     def hide(self):
         '''Hide the game window.
@@ -215,6 +215,8 @@ class GameWindow(object):
         '''
         send_request(self.channel, [common.REQ_DISCONNECT, self.client_name],
                      [self.server_name], self.client_queue)
+        send_request(self.channel, [common.REQ_DISCONNECT, self.client_name],
+                     [self.server_name, self.game_name], self.client_queue)
     
     def leave(self):
         '''Leave game session.
@@ -223,13 +225,16 @@ class GameWindow(object):
                      [self.server_name, self.game_name], self.client_queue)
 
     def send_simple_request(self, request):
-        '''Gend request to get info from server
+        '''Send request to get info from server
         '''
         send_request(self.channel, [request],
                      [self.server_name, self.game_name], self.client_queue)
     
-    def get_fields_from_server(self):
-        pass
+    def send_name_request(self, request):
+        '''Send request to get information about fields from server
+        '''
+        send_request(self.channel, [request, self.client_name],
+                     [self.server_name, self.game_name], self.client_queue)
     
     def reset_setting(self):
         '''Resets frames, dimensions, list of players
@@ -304,11 +309,11 @@ class GameWindow(object):
             
         # Kick button in case of owner
         if self.is_owner:
-            self.button_start = Tkinter.Button(self.frame_oponent, 
-                                               text="Kick out", 
-                                               command=self.start_game)
-            self.button_start.grid(row=self.height+3,
-                                   columnspan=self.width)
+            self.button_kick = Tkinter.Button(self.frame_oponent, 
+                                              text="Kick out", 
+                                              command=self.start_game) #TODO
+            self.button_kick.grid(row=self.height+3,
+                                  columnspan=self.width)
 
     def add_players(self, names):
         '''Add players to list of players and actualize the opponent_menu.
@@ -451,6 +456,15 @@ class GameWindow(object):
             else:
                 self.on_turn = msg_parts[1]
         
+        # If got fields, update fields
+        if msg_parts[0] == common.RSP_FIELDS:
+            for item in msg_parts[1:]:
+                item_parts = item.split(common.BUTTON_SEP)
+                for button in self.buttons[item_parts[0]].values():
+                    if button.row == int(item_parts[1]) and\
+                        button.column == int(item_parts[2]):
+                        button.change_color(item_parts[3])
+        
         # If response with ready, get ready
         if msg_parts[0] == common.RSP_READY:
             self.players_ready.add(self.client_name)
@@ -478,7 +492,7 @@ class GameWindow(object):
                     self.button_start = Tkinter.Button(self.frame_player, 
                                                        text="Start game", 
                                                        command=self.start_game)
-                    self.button_start.grid(row=self.height+2,
+                    self.button_start.grid(row=self.height+4,
                                            columnspan=self.width)
                                            
                     self.button_kick = Tkinter.Button(self.frame_oponent, 
