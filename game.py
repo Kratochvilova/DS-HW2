@@ -17,7 +17,7 @@ LOG.setLevel(logging.DEBUG)
 class Game(threading.Thread):
     '''Game session.
     '''
-    def __init__(self, game_list, server_name, name, owner, width, height):
+    def __init__(self, game_list, server_args, name, owner, width, height):
         super(Game, self).__init__(name='Game thread: %s' % name)
         
         self.game_list = game_list
@@ -32,15 +32,20 @@ class Game(threading.Thread):
         self.players.add(owner)
         
         # Communication
-        self.server_name = server_name
+        self.server_name = server_args.name
+        self.host = server_args.host
+        self.port = server_args.port
         
+        # To synchronize creation of the game communication, and sending enter
+        # game event to client
         self.ready_event = threading.Event()
     
     def run(self):
+        '''Method for running the thread.
+        '''
         # Connection
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(
-                host=common.DEFAULT_SERVER_INET_ADDR, 
-                port=common.DEFAULT_SERVER_PORT))
+                host=self.host, port=self.port))
         self.channel = self.connection.channel()
         self.channel.exchange_declare(exchange='direct_logs', type='direct')
         self.game_queue = self.channel.queue_declare(exclusive=True).method.queue
@@ -52,11 +57,31 @@ class Game(threading.Thread):
                                    queue=self.game_queue,
                                    no_ack=True)
         
+        self.control_queue = self.channel.queue_declare(exclusive=True).method.queue
+        self.channel.queue_bind(exchange='direct_logs',
+                                queue=self.control_queue,
+                                routing_key=self.control_queue)
+        self.channel.basic_consume(self.quit_game,
+                                   queue=self.control_queue,
+                                   no_ack=True)
+        
         self.ready_event.set()
         self.channel.start_consuming()
         self.game_list.remove_game(self.name)
 
+    def quit_game(self, ch, method, properties, body):
+        '''To quit the game from different thread.
+        @param ch: pika.BlockingChannel
+        @param method: pika.spec.Basic.Deliver
+        @param properties: pika.spec.BasicProperties
+        @param body: str or unicode
+        '''
+        self.channel.stop_consuming()
+
     def wait_for_ready(self):
+        '''To synchronize creation of the game communication, and sending enter
+        game event to client
+        '''
         self.ready_event.wait()
 
     def process_request(self, ch, method, properties, body):
@@ -90,7 +115,7 @@ class Game(threading.Thread):
                                        body=msg)
                 LOG.debug('Sent game event: %s', msg)
                 if len(self.players) == 0:
-                    # TODO: destroy game
+                    # Quit game
                     self.channel.stop_consuming()
                 
                 elif self.owner == msg_parts[1]:

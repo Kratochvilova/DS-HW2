@@ -26,18 +26,19 @@ ___BUILT = '2016-11-10'
 class GameList():
     '''List of game sessions.
     '''
-    def __init__(self, channel, server_name, clients):
+    def __init__(self, channel, server_args, clients):
         # Dict of running games
         self.games = {}
         
         # Communication
-        self.server_name = server_name
+        self.server_args = server_args
+        self.server_name = server_args.name
         self.clients = clients
         self.channel = channel
         self.games_queue = channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.games_queue,
-                                routing_key=server_name + common.SEP +\
+                                routing_key=self.server_name + common.SEP +\
                                     common.KEY_GAMES)
         self.channel.basic_consume(self.process_request,
                                    queue=self.games_queue,
@@ -51,7 +52,7 @@ class GameList():
         @param height: height of field of game
         '''
         # Create game in new thread
-        game = Game(self, self.server_name, name, owner, width, height)
+        game = Game(self, self.server_args, name, owner, width, height)
         self.games[name] = game
         game.start()
         
@@ -265,7 +266,7 @@ if __name__ == '__main__':
     LOG.debug('Started server advertising.')
     
     # Dict of games
-    game_list = GameList(channel, args.name, clients)
+    game_list = GameList(channel, args, clients)
     
     try:
         while True:
@@ -277,3 +278,9 @@ if __name__ == '__main__':
     server_on[0] = False
     stop_server(channel, args.name)
     LOG.debug('Stopped advertising.')
+    
+    # Send message to all games control queues to stop consuming.
+    for game in game_list.games.values():
+        channel.basic_publish(exchange='direct_logs',
+                              routing_key=game.control_queue,
+                              body='')

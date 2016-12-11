@@ -140,6 +140,8 @@ class GameWindow(object):
         LOG.debug('Sent message to server %s: %s', self.server_name, msg)
     
     def leave(self):
+        '''Leave game session.
+        '''
         msg = common.SEP.join([common.REQ_LEAVE_GAME, self.client_name])
         self.channel.basic_publish(exchange='direct_logs',
                                    routing_key=self.server_name + common.SEP +\
@@ -263,7 +265,8 @@ class GameWindow(object):
                 return
             self.width = int(msg_parts[1])
             self.height = int(msg_parts[2])
-            self.game_label = Tkinter.Label(self.frame_player, text="Game:")
+            self.game_label = Tkinter.Label(self.frame_player,
+                                            text=self.client_name)
             self.game_label.grid(columnspan=self.width)
             for i in range(self.height):
                 for j in range(self.width):
@@ -273,9 +276,10 @@ class GameWindow(object):
                 self.button_start = Tkinter.Button(self.frame_player, 
                                                    text="Start game", 
                                                    command=self.start_game)
-                self.button_start.grid(row=self.height+2,columnspan=self.width)
+                self.button_start.grid(row=self.height+2,
+                                       columnspan=self.width)
             
-            # second game field when the game starts
+            # Oponent game field
             self.opponent = Tkinter.StringVar(self.frame_oponent)
             self.opponent.set('')
             self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, 
@@ -307,5 +311,11 @@ class GameWindow(object):
         
         if msg_parts[0] == common.E_NEW_OWNER:
             if msg_parts[1] == self.client_name:
-                self.owner = 1
+                if not self.is_owner:
+                    self.button_start = Tkinter.Button(self.frame_player, 
+                                                       text="Start game", 
+                                                       command=self.start_game)
+                    self.button_start.grid(row=self.height+2,
+                                           columnspan=self.width)
+                self.is_owner = 1
             
