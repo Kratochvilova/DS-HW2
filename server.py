@@ -13,6 +13,7 @@ LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
 import common
 from game import Game
+from windows import send_message
 from argparse import ArgumentParser
 from time import sleep
 import threading
@@ -56,11 +57,9 @@ class GameList():
         self.games[name] = game
         game.start()
         
-        self.channel.basic_publish(exchange='direct_logs',
-                                   routing_key=self.server_name + common.SEP +\
-                                       common.KEY_GAME_OPEN,
-                                   body=name)
-        LOG.debug('Sent event: added game: %s', name)
+        # Send event about added game
+        send_message(self.channel, [name],
+                     [self.server_name, common.KEY_GAME_OPEN])
         
         return game
 
@@ -70,12 +69,9 @@ class GameList():
         '''
         try:
             del self.games[name]
-            self.channel.basic_publish(exchange='direct_logs',
-                                       routing_key=self.server_name +\
-                                           common.SEP +\
-                                           common.KEY_GAME_END,
-                                       body=name)
-            LOG.debug('Sent event: removed game: %s', name)
+            # Send event about removed game
+            send_message(self.channel, [name],
+                     [self.server_name, common.KEY_GAME_END])
         except KeyError:
             pass
     
@@ -138,13 +134,10 @@ class GameList():
                 if msg_parts[2] not in self.games[msg_parts[1]].players:
                     self.games[msg_parts[1]].players[msg_parts[2]] = {}
                     # Send event that new player was added
-                    msg = common.E_NEW_PLAYER + common.SEP + msg_parts[2]
-                    self.channel.basic_publish(exchange='direct_logs',
-                                           routing_key=self.server_name +\
-                                               common.SEP + msg_parts[1] +\
-                                               common.SEP + common.KEY_GAME_EVENTS,
-                                           body=msg)
-                    LOG.debug('Sent game event: %s', msg)
+                    send_message(self.channel,
+                                 [common.E_NEW_PLAYER, msg_parts[2]],
+                                 [self.server_name, msg_parts[1], 
+                                  common.KEY_GAME_EVENTS])
                 response = common.SEP.join([common.RSP_GAME_ENTERED, 
                                             msg_parts[1], '0'])
         

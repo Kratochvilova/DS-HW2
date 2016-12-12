@@ -6,7 +6,7 @@ Created on Fri Dec  9 20:55:58 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen, send_request
+from . import listen, send_message
 import threading
 import Tkinter
 import tkMessageBox
@@ -65,6 +65,7 @@ class GameButton(Tkinter.Button):
                 self.game_window.ships_remaining != 0:
                 self.change_color('ship')
                 self.game_window.ships_remaining -= 1
+                self.game_window.ready_label.destroy()
                 self.game_window.ready_label = Tkinter.Label(
                     self.game_window.frame_player, 
                     text='Ships remaining: %s' %\
@@ -77,6 +78,7 @@ class GameButton(Tkinter.Button):
             elif self.color == 'ship':
                 self.change_color('water')
                 self.game_window.ships_remaining += 1
+                self.game_window.ready_label.destroy()
                 self.game_window.ready_label = Tkinter.Label(
                     self.game_window.frame_player, 
                     text='Ships remaining: %s' %\
@@ -132,8 +134,8 @@ class GameWindow(object):
         self.frame_player = Tkinter.Frame(self.frame, borderwidth=15)
         self.frame_player.pack()
         
-        self.frame_oponent = Tkinter.Frame(self.frame, borderwidth=15)
-        self.frame_oponent.pack()
+        self.frame_opponent = Tkinter.Frame(self.frame, borderwidth=15)
+        self.frame_opponent.pack()
         
         # Communication
         self.channel = channel
@@ -213,27 +215,27 @@ class GameWindow(object):
     def disconnect(self):
         '''Disconnect from server.
         '''
-        send_request(self.channel, [common.REQ_DISCONNECT, self.client_name],
+        send_message(self.channel, [common.REQ_DISCONNECT, self.client_name],
                      [self.server_name], self.client_queue)
-        send_request(self.channel, [common.REQ_DISCONNECT, self.client_name],
+        send_message(self.channel, [common.REQ_DISCONNECT, self.client_name],
                      [self.server_name, self.game_name], self.client_queue)
     
     def leave(self):
         '''Leave game session.
         '''
-        send_request(self.channel, [common.REQ_LEAVE_GAME, self.client_name], 
+        send_message(self.channel, [common.REQ_LEAVE_GAME, self.client_name], 
                      [self.server_name, self.game_name], self.client_queue)
 
     def send_simple_request(self, request):
         '''Send request to get info from server
         '''
-        send_request(self.channel, [request],
+        send_message(self.channel, [request],
                      [self.server_name, self.game_name], self.client_queue)
     
     def send_name_request(self, request):
         '''Send request to get information about fields from server
         '''
-        send_request(self.channel, [request, self.client_name],
+        send_message(self.channel, [request, self.client_name],
                      [self.server_name, self.game_name], self.client_queue)
     
     def reset_setting(self):
@@ -241,15 +243,15 @@ class GameWindow(object):
         '''
         # Reset frames
         self.frame_player.destroy()
-        self.frame_oponent.destroy()
+        self.frame_opponent.destroy()
         
         self.frame_player = Tkinter.Frame(self.frame, borderwidth=15)
         self.frame_player.pack()
         
-        self.frame_oponent = Tkinter.Frame(self.frame, borderwidth=15)
-        self.frame_oponent.pack()
+        self.frame_opponent = Tkinter.Frame(self.frame, borderwidth=15)
+        self.frame_opponent.pack()
         
-        self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, '', '')
+        self.opponent_menu = Tkinter.OptionMenu(self.frame_opponent, '', '')
         
         # Reset game attributes
         self.width = None
@@ -298,18 +300,18 @@ class GameWindow(object):
                                                command=self.start_game)
             self.button_start.grid(row=self.height+4, columnspan=self.width)
             
-        # Oponent frame
-        self.opponent_menu = Tkinter.OptionMenu(self.frame_oponent, '', '')
+        # Opponent frame
+        self.opponent_menu = Tkinter.OptionMenu(self.frame_opponent, '', '')
         self.opponent_menu.grid(columnspan=self.width)
 
         for i in range(self.height):
             for j in range(self.width):
-                b = GameButton(self.frame_oponent, i+1, j, 'opponent',self)
+                b = GameButton(self.frame_opponent, i+1, j, 'opponent',self)
                 b.grid(row=i+1, column=j)
             
         # Kick button in case of owner
         if self.is_owner:
-            self.button_kick = Tkinter.Button(self.frame_oponent, 
+            self.button_kick = Tkinter.Button(self.frame_opponent, 
                                               text="Kick out", 
                                               command=self.start_game) #TODO
             self.button_kick.grid(row=self.height+3,
@@ -328,7 +330,6 @@ class GameWindow(object):
             pass
         
         # Reset currently selected and delete old options
-        self.opponent = ''
         self.opponent_menu['menu'].delete(0, 'end')
         
         # Insert new player list (tk._setit hooks them up to var)
@@ -342,8 +343,8 @@ class GameWindow(object):
         '''
         # Remove player from list
         try:
-            del self.players[self.players.index(name)]
-        except:
+            self.players.remove(name)
+        except KeyError:
             return
         
         # Reset currently selected and delete old options
@@ -366,7 +367,11 @@ class GameWindow(object):
             else:
                 label = 'Not ready'
             
-            self.ready_label_op = Tkinter.Label(self.frame_oponent, text=label)
+            try:
+                self.ready_label_op.destroy()
+            except AttributeError:
+                pass
+            self.ready_label_op = Tkinter.Label(self.frame_opponent, text=label)
             self.ready_label_op.grid(row=self.height+2, columnspan=self.width)
         else:
             # TODO: actualize opponent field
@@ -394,7 +399,7 @@ class GameWindow(object):
         else:
             # Send request to server
             ships = self.get_ships(self.buttons[self.client_name].values())
-            send_request(self.channel,
+            send_message(self.channel,
                          [common.REQ_SET_READY, self.client_name] + ships,
                          [self.server_name, self.game_name], self.client_queue)
             # Color the button
@@ -495,10 +500,12 @@ class GameWindow(object):
                     self.button_start.grid(row=self.height+4,
                                            columnspan=self.width)
                                            
-                    self.button_kick = Tkinter.Button(self.frame_oponent, 
+                    self.button_kick = Tkinter.Button(self.frame_opponent, 
                                                       text="Kick out", 
                                                       command=self.kick_out)
                     self.button_kick.grid(row=self.height+3,
                                           columnspan=self.width)
                 self.is_owner = 1
-            
+        
+        if msg_parts[0] == common.E_PLAYER_READY:
+            self.players_ready.add(msg_parts[1])

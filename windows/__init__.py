@@ -41,7 +41,7 @@ def thread_printing():
     t_debug.setDaemon(True)
     t_debug.start()
 
-def send_request(channel, msg_args, routing_args, reply_to=None):
+def send_message(channel, msg_args, routing_args, reply_to=None):
     '''Compose message and routing key, and send request.
     @param channel: pika communication channel
     @param msg_args: message arguments

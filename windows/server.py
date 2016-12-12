@@ -6,7 +6,7 @@ Created on Tue Dec  6 21:29:21 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen, send_request
+from . import listen, send_message
 import threading
 import Tkinter
 import tkMessageBox
@@ -164,7 +164,7 @@ class ServerWindow(object):
             return
         
         # Sending connect request
-        send_request(self.channel, [common.REQ_CONNECT, username],
+        send_message(self.channel, [common.REQ_CONNECT, username],
                      [server_name], self.client_queue)
 
     def on_response(self, ch, method, properties, body):

@@ -6,7 +6,7 @@ Created on Tue Dec  7 16:27:21 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen, send_request
+from . import listen, send_message
 import threading
 import Tkinter
 import tkMessageBox
@@ -179,7 +179,7 @@ class LobbyWindow(object):
     def disconnect(self):
         '''Disconnect from server.
         '''
-        send_request(self.channel, [common.REQ_DISCONNECT, self.client_name],
+        send_message(self.channel, [common.REQ_DISCONNECT, self.client_name],
                      [self.server_name], self.client_queue)
     
     def add_game(self, name, state):
@@ -237,11 +237,11 @@ class LobbyWindow(object):
         '''Send requests to server to get list of all game sessions.
         '''
         # Sending request to get list of opened games
-        send_request(self.channel, [common.REQ_GET_LIST_OPENED],
+        send_message(self.channel, [common.REQ_GET_LIST_OPENED],
                      [self.server_name, common.KEY_GAMES], self.client_queue)
         
         # Sending request to get list of closed games
-        send_request(self.channel, [common.REQ_GET_LIST_CLOSED],
+        send_message(self.channel, [common.REQ_GET_LIST_CLOSED],
                      [self.server_name, common.KEY_GAMES], self.client_queue)
     
     def create_game(self):
@@ -255,7 +255,7 @@ class LobbyWindow(object):
         height = self.height_entry.get()
         
         # Sending request to create game
-        send_request(self.channel,
+        send_message(self.channel,
                      [common.REQ_CREATE_GAME, gamename, self.client_name,
                       str(width), str(height)],
                      [self.server_name, common.KEY_GAMES], self.client_queue)
@@ -268,7 +268,7 @@ class LobbyWindow(object):
         gamename = self.listbox_opened.get(self.listbox_opened.curselection())
         
         # Sending request to create game
-        send_request(self.channel,
+        send_message(self.channel,
                      [common.REQ_JOIN_GAME, gamename, self.client_name],
                      [self.server_name, common.KEY_GAMES], self.client_queue)
 

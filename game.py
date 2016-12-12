@@ -6,6 +6,7 @@ Created on Sat Dec 10 12:54:37 2016
 """
 # Imports----------------------------------------------------------------------
 import common
+from windows import send_message
 import random
 import pika
 import threading
@@ -141,22 +142,20 @@ class Game(threading.Thread):
         # Disconnect request
         if msg_parts[0] == common.REQ_DISCONNECT:
             response = common.RSP_DISCONNECTED
-            if len(self.players.keys()) == 1:
+            if len(self.players.keys()) <= 1:
                 # Quit game
                 self.channel.stop_consuming()
                 self.game_list.remove_game(self.name)
                 
-            if self.owner == msg_parts[1]:
+            elif self.owner == msg_parts[1]:
                 rest = [p for p in self.players.keys() if p != msg_parts[1]]
                 new_owner = random.choice(rest)
                 self.owner = new_owner
                 # Send event that owner changed
-                msg = common.E_NEW_OWNER + common.SEP + new_owner
-                self.channel.basic_publish(exchange='direct_logs',
-                                           routing_key=self.server_name +\
-                                               common.SEP +\
-                                               common.KEY_GAMES,
-                                           body=msg)
+                send_message(self.channel, [common.E_NEW_OWNER, new_owner],
+                             [self.server_name, self.name,
+                              common.KEY_GAME_EVENTS])
+        
         # Leave game request
         if msg_parts[0] == common.REQ_LEAVE_GAME:
             if len(msg_parts) != 2:
@@ -168,13 +167,10 @@ class Game(threading.Thread):
                     pass
                 response = common.RSP_GAME_LEFT
                 # Send event that player left
-                msg = common.E_PLAYER_LEFT + common.SEP + msg_parts[1]
-                self.channel.basic_publish(exchange='direct_logs',
-                                       routing_key=self.server_name +\
-                                           common.SEP + self.name +\
-                                           common.SEP + common.KEY_GAME_EVENTS,
-                                       body=msg)
-                LOG.debug('Sent game event: %s', msg)
+                send_message(self.channel, [common.E_PLAYER_LEFT,msg_parts[1]],
+                             [self.server_name, self.name,
+                              common.KEY_GAME_EVENTS])
+                
                 if len(self.players.keys()) == 0:
                     # Quit game
                     self.channel.stop_consuming()
@@ -184,13 +180,9 @@ class Game(threading.Thread):
                     new_owner = random.choice(self.players.keys())
                     self.owner = new_owner
                     # Send event that owner changed
-                    msg = common.E_NEW_OWNER + common.SEP + new_owner
-                    self.channel.basic_publish(exchange='direct_logs',
-                                               routing_key=self.server_name +\
-                                                   common.SEP + self.name +\
-                                                   common.SEP +\
-                                                   common.KEY_GAME_EVENTS,
-                                               body=msg)
+                    send_message(self.channel, [common.E_NEW_OWNER, new_owner],
+                             [self.server_name, self.name,
+                              common.KEY_GAME_EVENTS])
                                                
         # Get dimensions request
         if msg_parts[0] == common.REQ_GET_DIMENSIONS:
@@ -227,6 +219,11 @@ class Game(threading.Thread):
             else:
                 self.add_ships(msg_parts[1], msg_parts[2:])
                 response = common.RSP_READY
+                # Send event that player is ready
+                send_message(self.channel,
+                             [common.E_PLAYER_READY, msg_parts[1]],
+                             [self.server_name, self.name,
+                              common.KEY_GAME_EVENTS])
 
         # Sending response
         ch.basic_publish(exchange='direct_logs',
