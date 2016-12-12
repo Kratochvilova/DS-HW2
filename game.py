@@ -114,7 +114,8 @@ class Game(threading.Thread):
         self.fields[player] = common.Field(self.width, self.height)
         for ship in ships:
             ship_position = ship.split(common.FIELD_SEP)
-            self.fields[player].add_item(ship_position[0], ship_position[1],
+            self.fields[player].add_item(int(ship_position[0]),
+                                         int(ship_position[1]),
                                          common.FIELD_SHIP)
 
     def get_field(self, player):
@@ -134,6 +135,36 @@ class Game(threading.Thread):
         if player not in self.player_hits:
             return result
         return self.player_hits[player]
+    
+    def check_ship_sinked(self, field, row, column, searched):
+        searched.append((row, column))
+        if field.get_item(row, column) == common.FIELD_SHIP:
+            return False
+        if field.get_item(row, column) == common.FIELD_HIT_SHIP:
+            if (row-1, column) not in searched:
+                result = self.check_ship_sinked(field, row-1, column, searched)
+                if result is False:
+                    return False
+            if (row+1, column) not in searched:
+                result = self.check_ship_sinked(field, row+1, column, searched)
+                if result is False:
+                    return False
+            if (row, column-1) not in searched:
+                result = self.check_ship_sinked(field, row, column-1, searched)
+                if result is False:
+                    return False
+            if (row, column+1) not in searched:
+                result = self.check_ship_sinked(field, row, column+1, searched)
+                if result is False:
+                    return False
+        return True
+    
+    def check_end_game(self):
+        number_unfinished_players = 0
+        for field in self.fields.values():
+            if field.get_all_items(common.FIELD_SHIP) != []:
+                number_unfinished_players += 1
+        return number_unfinished_players <= 1
     
     def player_left(self, player):
         '''Actions on player leaving or disconnecting from the game
@@ -256,6 +287,7 @@ class Game(threading.Thread):
                 self.on_turn = self.owner
                 self.player_order.append(self.owner)
                 not_sorted = list(self.players)
+                not_sorted.remove(self.owner)
                 while len(not_sorted) > 0:
                     random_player = random.choice(not_sorted)
                     self.player_order.append(random_player)
@@ -272,17 +304,29 @@ class Game(threading.Thread):
             if msg_parts[1] != self.on_turn:
                 response = common.RSP_NOT_ON_TURN
             else:
-                item = self.fields[msg_parts[2]].get_item(msg_parts[3],
-                                                          msg_parts[4])
+                item = self.fields[msg_parts[2]].get_item(int(msg_parts[3]),
+                                                          int(msg_parts[4]))
                 if item is None:
                     response = common.SEP.join([common.RSP_MISS]+msg_parts[1:])
                 else:
+                    self.fields[msg_parts[2]].hit_ship(int(msg_parts[3]),
+                                                       int(msg_parts[4]))
                     response = common.SEP.join([common.RSP_HIT]+msg_parts[1:])
                     # Notify the hit player
                     send_message(self.channel, [common.RSP_HIT]+msg_parts[1:],
                                  [self.client_queues[msg_parts[2]]])
-                # TODO: send event if ship sinked
-                # TODO: check end-game condition
+                    
+                    # Check if ship sinked
+                    if self.check_ship_sinked(self.fields[msg_parts[2]],
+                                              int(msg_parts[3]), int(msg_parts[4]),
+                                              []):
+                        print('SINKED')
+                    # Check end-game condition
+                    if self.check_end_game():
+                        send_message(self.channel, [common.E_END_GAME],
+                                     [self.server_name, self.name,
+                                      common.KEY_GAME_EVENTS])
+                    
                 # Change turn
                 next_index = self.player_order.index(self.on_turn) + 1
                 if next_index >= len(self.player_order):

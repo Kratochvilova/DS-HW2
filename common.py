@@ -88,6 +88,7 @@ E_GAME_STARTS = 'game starts'
 E_ON_TURN = 'on turn'
 E_HIT = 'hit'
 E_SINK = 'sink'
+E_END_GAME = 'end game'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'
@@ -159,7 +160,21 @@ class Field(object):
         del self.field_dict[(row, column)]
         return True
 
-
+    def hit_ship(self, row, column):
+        '''Change ship to hit ship.
+        @param row: row
+        @param column: column        
+        '''
+        if row < 0 or row > self.height or column < 0 or column > self.width:
+            return False
+        if (row, column) not in self.field_dict:
+            return False
+        if self.field_dict[(row, column)] != FIELD_SHIP:
+            return False
+        
+        self.field_dict[(row, column)] = FIELD_HIT_SHIP
+        return True
+    
     def get_item(self, row, column):
         '''Gets item by position.
         param row: row
