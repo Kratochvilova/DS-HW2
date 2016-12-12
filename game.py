@@ -36,7 +36,7 @@ class Game(threading.Thread):
         self.on_turn = None
         self.player_hits = {}
         self.client_queues = {}
-        self.player_order = []        
+        self.player_order = []
         
         # Communication
         self.server_name = server_args.name
@@ -369,9 +369,24 @@ class Game(threading.Thread):
                 if next_index >= len(self.player_order):
                     next_index = 0
                 self.on_turn = self.player_order[next_index]
+                # Send on turn event
                 send_message(self.channel, [common.E_ON_TURN, self.on_turn],
                              [self.server_name, self.name,
                               common.KEY_GAME_EVENTS])
+
+        # Restart session request
+        if msg_parts[0] == common.REQ_RESTART_SESSION:
+            if self.check_end_game():
+                response = common.RSP_OK
+                # Send restart session event
+                send_message(self.channel, [common.E_SESSION_RESTARTS],
+                             [self.server_name, self.name,
+                              common.KEY_GAME_EVENTS])
+                # Restart game
+                self.fields = {}
+                self.on_turn = None
+                self.player_hits = {}
+                self.player_order = []
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',

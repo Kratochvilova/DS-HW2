@@ -631,3 +631,18 @@ class GameWindow(object):
                 field.add_item(int(sink_ship_pos[0]), int(sink_ship_pos[1]),
                                common.FIELD_SINK_SHIP)
             self.update_buttons()
+
+        if msg_parts[0] == common.E_END_GAME:
+            s = self.fields[self.client_name].get_all_items(common.FIELD_SHIP)
+            if s != []:
+                tkMessageBox.showinfo('Game', 'Congratulations, you won!')
+            else:
+                tkMessageBox.showinfo('Game', 'Game ended!')
+            if self.is_owner:
+                if tkMessageBox.askyesno('Game', 'Restart session?'):
+                    self.send_simple_request(common.REQ_RESTART_SESSION)
+
+        if msg_parts[0] == common.E_SESSION_RESTARTS:
+            self.hide()
+            self.show([self.server_name, self.client_name, self.game_name,
+                      self.is_owner])

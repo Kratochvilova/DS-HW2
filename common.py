@@ -63,6 +63,7 @@ REQ_GET_HITS = 'get hits'
 REQ_SET_READY = 'set ready'
 REQ_START_GAME = 'start game'
 REQ_SHOOT = 'shoot'
+REQ_RESTART_SESSION = 'restart session'
 # Responses
 RSP_GAME_LEFT = 'game left'
 RSP_DIMENSIONS = 'dimensions'
@@ -89,6 +90,7 @@ E_ON_TURN = 'on turn'
 E_HIT = 'hit'
 E_SINK = 'sink'
 E_END_GAME = 'end game'
+E_SESSION_RESTARTS = 'session restarts'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'
