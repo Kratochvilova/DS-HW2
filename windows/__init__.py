@@ -2,9 +2,7 @@ import logging
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 
-import common
 import threading
-import pika
 from time import sleep
 
 counter = 0
@@ -41,16 +39,3 @@ def thread_printing():
     t_debug.setDaemon(True)
     t_debug.start()
 
-def send_message(channel, msg_args, routing_args, reply_to=None):
-    '''Compose message and routing key, and send request.
-    @param channel: pika communication channel
-    @param msg_args: message arguments
-    @param routing_key_args: routing key arguments
-    @param reply_to: queue expecting reply
-    '''
-    message = common.SEP.join(msg_args)
-    routing_key = common.SEP.join(routing_args)
-    properties = pika.BasicProperties(reply_to = reply_to)
-    channel.basic_publish(exchange='direct_logs', routing_key=routing_key,
-                          properties=properties, body=message)
-    LOG.debug('Sent message to "%s": "%s"', routing_key, message)

@@ -4,6 +4,12 @@ Created on Thu Dec  1 21:38:50 2016
 
 @author: pavla kratochvilova
 """
+# Imports ---------------------------------------------------------------------
+import pika
+# Logging ---------------------------------------------------------------------
+import logging
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
 # Connection related constants ------------------------------------------------
 DEFAULT_SERVER_PORT = 5672
 DEFAULT_SERVER_INET_ADDR = '127.0.0.1'
@@ -68,7 +74,8 @@ RSP_READY = 'ready'
 RSP_SHIPS_INCORRECT = 'ships incorrect'
 RSP_NOT_ALL_READY = 'not all ready'
 RSP_NOT_ON_TURN = 'not on turn'
-RSP_SHOT = 'shot'
+RSP_HIT = 'hit'
+RSP_MISS = 'miss'
 
 # Game events -----------------------------------------------------------------
 E_NEW_PLAYER = 'new player'
@@ -77,6 +84,8 @@ E_NEW_OWNER = 'new owner'
 E_PLAYER_READY = 'player ready'
 E_GAME_STARTS = 'game starts'
 E_ON_TURN = 'on turn'
+E_HIT = 'hit'
+E_SINK = 'sink'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'
@@ -85,3 +94,19 @@ RSP_INVALID_REQUEST = 'invalid request'
 # Separator -------------------------------------------------------------------
 SEP = ':'
 BUTTON_SEP = ','
+
+# Common functions ------------------------------------------------------------
+def send_message(channel, msg_args, routing_args, reply_to=None):
+    '''Compose message and routing key, and send request.
+    @param channel: pika communication channel
+    @param msg_args: message arguments
+    @param routing_key_args: routing key arguments
+    @param reply_to: queue expecting reply
+    '''
+    message = SEP.join(msg_args)
+    routing_key = SEP.join(routing_args)
+    properties = pika.BasicProperties(reply_to = reply_to)
+    channel.basic_publish(exchange='direct_logs', routing_key=routing_key,
+                          properties=properties, body=message)
+    LOG.debug('Sent message to "%s": "%s"', routing_key, message)
+
