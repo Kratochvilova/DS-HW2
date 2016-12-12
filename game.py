@@ -36,6 +36,7 @@ class Game(threading.Thread):
         self.on_turn = None
         self.player_hits = {}
         self.client_queues = {}
+        self.player_order = []        
         
         # Communication
         self.server_name = server_args.name
@@ -139,7 +140,10 @@ class Game(threading.Thread):
         @param player: name of player
         '''
         # Remove player's client queue
-        del self.client_queues[player]
+        try:
+            del self.client_queues[player]
+        except KeyError:
+            pass
         
         # If noone is in the game
         if len(self.client_queues.keys()) == 0:
@@ -248,7 +252,15 @@ class Game(threading.Thread):
                 # Send event about game start
                 send_message(self.channel, [self.name],
                              [self.server_name, common.KEY_GAME_CLOSE])
+                # Determine player order
                 self.on_turn = self.owner
+                self.player_order.append(self.owner)
+                not_sorted = list(self.players)
+                while len(not_sorted) > 0:
+                    random_player = random.choice(not_sorted)
+                    self.player_order.append(random_player)
+                    not_sorted.remove(random_player)
+                
                 # Send event that game starts
                 send_message(self.channel,
                              [common.E_GAME_STARTS, self.on_turn],
@@ -263,16 +275,22 @@ class Game(threading.Thread):
                 item = self.fields[msg_parts[2]].get_item(msg_parts[3],
                                                           msg_parts[4])
                 if item is None:
-                    response = common.SEP.join([common.RSP_MISS]+msg_parts[2:])
+                    response = common.SEP.join([common.RSP_MISS]+msg_parts[1:])
                 else:
                     response = common.SEP.join([common.RSP_HIT]+msg_parts[1:])
                     # Notify the hit player
                     send_message(self.channel, [common.RSP_HIT]+msg_parts[1:],
                                  [self.client_queues[msg_parts[2]]])
-                
                 # TODO: send event if ship sinked
                 # TODO: check end-game condition
-                # TODO: change turn
+                # Change turn
+                next_index = self.player_order.index(self.on_turn) + 1
+                if next_index >= len(self.player_order):
+                    next_index = 0
+                self.on_turn = self.player_order[next_index]
+                send_message(self.channel, [common.E_ON_TURN, self.on_turn],
+                             [self.server_name, self.name,
+                              common.KEY_GAME_EVENTS])
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',

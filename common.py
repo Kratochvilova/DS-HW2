@@ -156,7 +156,7 @@ class Field(object):
         if (row, column) not in self.field_dict:
             return False
         
-        del self.field_dictself.field_dict[(row, column)]
+        del self.field_dict[(row, column)]
         return True
 
 
@@ -167,6 +167,9 @@ class Field(object):
         @return String, item
         '''
         if row < 0 or row > self.height or column < 0 or column > self.width:
+            return None
+        
+        if (row, column) not in self.field_dict:
             return None
         
         return self.field_dict[(row, column)]

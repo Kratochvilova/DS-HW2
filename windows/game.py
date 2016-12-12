@@ -409,6 +409,10 @@ class GameWindow(object):
         @param name: name of the selected opponent
         '''
         self.opponent = name
+        self.opponent_label.destroy()
+        self.opponent_label = Tkinter.Label(self.frame_opponent, text=name)
+        self.opponent_label.grid(row=1, columnspan=self.width)
+            
         if self.on_turn is None:
             if name in self.players_ready:
                 label = 'Ready'
@@ -421,9 +425,6 @@ class GameWindow(object):
                 pass
             self.ready_label_op = Tkinter.Label(self.frame_opponent,text=label)
             self.ready_label_op.grid(row=self.height+3, columnspan=self.width)
-            self.opponent_label.destroy()
-            self.opponent_label = Tkinter.Label(self.frame_opponent, text=name)
-            self.opponent_label.grid(row=1, columnspan=self.width)
         else:
             self.update_buttons()
     
@@ -462,7 +463,7 @@ class GameWindow(object):
     def update_buttons(self):
         for key, value in self.fields[self.client_name].field_dict.items():
             self.player_buttons[key].change_color(value)
-        if self.on_turn is not None: 
+        if self.on_turn is not None and self.opponent is not None:
             for key, value in self.fields[self.opponent].field_dict.items():
                 self.opponent_buttons[key].change_color(value)
     
