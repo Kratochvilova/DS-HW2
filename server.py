@@ -144,6 +144,21 @@ class GameList():
                 response = common.SEP.join([common.RSP_GAME_ENTERED, 
                                             msg_parts[1], '0'])
         
+        # Spectating game request
+        if msg_parts[0] == common.REQ_SPECTATE_GAME:
+            if len(msg_parts) != 3 or msg_parts[1].strip() == '':
+                response = common.RSP_INVALID_REQUEST
+            elif msg_parts[1] not in self.games:
+                response = common.RSP_NAME_DOESNT_EXIST
+            elif msg_parts[2] not in self.clients.client_set:
+                response = common.RSP_PERMISSION_DENIED
+            elif msg_parts[2] in self.games[msg_parts[1]].players:
+                response = common.RSP_PERMISSION_DENIED
+            else:
+                self.games[msg_parts[1]].spectators.add(msg_parts[2])
+                response = common.SEP.join([common.RSP_GAME_SPECTATING, 
+                                            msg_parts[1], '0'])
+        
         # Sending response
         ch.basic_publish(exchange='direct_logs',
                          routing_key=properties.reply_to,

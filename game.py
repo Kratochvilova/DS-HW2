@@ -37,6 +37,7 @@ class Game(threading.Thread):
         self.player_hits = {}
         self.client_queues = {}
         self.player_order = []
+        self.spectators = set()
         
         # Communication
         self.server_name = server_args.name
@@ -55,6 +56,8 @@ class Game(threading.Thread):
                 host=self.host, port=self.port))
         self.channel = self.connection.channel()
         self.channel.exchange_declare(exchange='direct_logs', type='direct')
+        
+        # Game queue
         self.game_queue =\
             self.channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
@@ -65,6 +68,15 @@ class Game(threading.Thread):
                                    queue=self.game_queue,
                                    no_ack=True)
         
+        # Spectator queue
+        self.spectator_queue =\
+            self.channel.queue_declare(exclusive=True).method.queue
+        self.channel.queue_bind(exchange='direct_logs',
+                                queue=self.spectator_queue,
+                                routing_key=common.SEP.join([self.server_name,
+                                        self.name, common.KEY_GAME_EVENTS]))
+        
+        # Control queue for quiting consuming
         self.control_queue =\
             self.channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
@@ -284,11 +296,21 @@ class Game(threading.Thread):
         if msg_parts[0] == common.REQ_GET_FIELD:
             response = common.SEP.join([common.RSP_FIELD] +\
                                         self.get_field(msg_parts[1]))
-
+        
         # Get hits request
         if msg_parts[0] == common.REQ_GET_HITS:
-            response = common.SEP.join([common.RSP_FIELD] +\
-                                        self.get_hits(msg_parts[1]))        
+            response = common.SEP.join([common.RSP_HITS] +\
+                                        self.get_hits(msg_parts[1]))    
+        
+        # Get all fields request
+        if msg_parts[0] == common.REQ_GET_ALL_FIELDS:
+            if msg_parts[1] not in self.spectators:
+                response = common.RSP_PERMISSION_DENIED
+            else:
+                response = common.RSP_ALL_FIELDS
+                for player in self.players:
+                    items = self.fields[player].get_all_items()
+                    response += common.SEP + common.SEP.join([player] + items)
         
         # Set ready request
         if msg_parts[0] == common.REQ_SET_READY:
@@ -310,6 +332,8 @@ class Game(threading.Thread):
                 response = common.RSP_NOT_ALL_READY
             else:
                 self.state = 'closed'
+                for player in self.players:
+                    self.player_hits[player] = []
                 # Send event about game start
                 send_message(self.channel, [self.name],
                              [self.server_name, common.KEY_GAME_CLOSE])
@@ -337,6 +361,10 @@ class Game(threading.Thread):
                 item = self.fields[msg_parts[2]].get_item(int(msg_parts[3]),
                                                           int(msg_parts[4]))
                 if item is None:
+                    item = common.FIELD_WATER
+                self.player_hits[msg_parts[1]].append(common.FIELD_SEP.join(
+                    [msg_parts[2], msg_parts[3], msg_parts[4], item]))
+                if item == common.FIELD_WATER:
                     response = common.SEP.join([common.RSP_MISS]+msg_parts[1:])
                 else:
                     self.fields[msg_parts[2]].change_item(

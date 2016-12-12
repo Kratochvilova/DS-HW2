@@ -60,6 +60,9 @@ class GameButton(Tkinter.Button):
     def button_pressed(self):
         '''Reaction on pressing the button.
         '''
+        if self.game_window.spectator:
+            return
+        
         LOG.debug('Pressed button on position: %s, %s', self.row, self.column)
         # If in positioning ships phase
         if self.game_window.client_name not in self.game_window.players_ready:
@@ -152,6 +155,11 @@ class GameWindow(object):
         self.opponent_buttons = {}
         self.opponent = None
         self.fields = {}
+
+        # Spectator option
+        self.spectator = False
+        
+        self.ready_event = threading.Event()
         
         # Queue of events for window control
         self.events = events
@@ -191,6 +199,7 @@ class GameWindow(object):
         self.client_name = arguments[1]
         self.game_name = arguments[2]
         self.is_owner = arguments[3]
+        self.spectator = arguments[4]
         self.on_show()
         self.root.deiconify()
 
@@ -210,7 +219,7 @@ class GameWindow(object):
         self.channel.basic_consume(self.on_response, 
                                    queue=self.client_queue,
                                    no_ack=True)
-        self.channel.basic_consume(self.on_event, 
+        self.channel.basic_consume(self.on_event,
                                    queue=self.events_queue,
                                    no_ack=True)
         # Listening
@@ -223,8 +232,16 @@ class GameWindow(object):
         self.send_simple_request(common.REQ_GET_PLAYERS_READY)
         self.send_simple_request(common.REQ_GET_OWNER)
         self.send_simple_request(common.REQ_GET_TURN)
-        self.send_name_request(common.REQ_GET_FIELD)
-        self.send_name_request(common.REQ_GET_HITS)
+        
+        self.wait_for_ready()
+        if self.on_turn is not None:
+            print 'Want to start game'
+            self.at_game_start(self.on_turn)
+            self.send_name_request(common.REQ_GET_FIELD)
+            self.send_name_request(common.REQ_GET_HITS)
+
+        if self.spectator:
+            self.send_name_request(common.REQ_GET_ALL_FIELDS)
 
     def hide(self):
         '''Hide the game window.
@@ -251,6 +268,11 @@ class GameWindow(object):
         else:
             LOG.error('LobbyWindow.on_hide called from non-listening thread.')
 
+    def wait_for_ready(self):
+        '''To synchronize game communication.
+        '''
+        self.ready_event.wait()
+        
     def disconnect(self):
         '''Disconnect from server.
         '''
@@ -328,14 +350,15 @@ class GameWindow(object):
                 b.grid(row=i+1, column=j)
                 self.player_buttons[(i, j)] = b
 
-        self.ready_label = Tkinter.Label(self.frame_player,
-                                         text='Ships remaining: %s' %\
-                                             self.ships_remaining)
-        self.ready_label.grid(row=self.height+2, columnspan=self.width)
-        
-        self.button_ready = Tkinter.Button(self.frame_player, text="Ready",
-                                           command=self.get_ready)
-        self.button_ready.grid(row=self.height+3, columnspan=self.width)
+        if not self.spectator:
+            self.ready_label = Tkinter.Label(self.frame_player,
+                                             text='Ships remaining: %s' %\
+                                                 self.ships_remaining)
+            self.ready_label.grid(row=self.height+2, columnspan=self.width)
+            
+            self.button_ready = Tkinter.Button(self.frame_player, text="Ready",
+                                               command=self.get_ready)
+            self.button_ready.grid(row=self.height+3, columnspan=self.width)
         
         # Start button in case of owner
         if self.is_owner:
@@ -461,12 +484,37 @@ class GameWindow(object):
         else:
             tkMessageBox.showinfo('Game', 'Not all players are ready')
     
+    def at_game_start(self, on_turn):
+        '''Actions on game start.
+        '''
+        LOG.debug('Game started.')
+        if not self.spectator:
+            self.ready_label.destroy()
+            self.button_ready.destroy()
+        try:
+            self.ready_label_op.destroy()
+        except AttributeError:
+            pass
+        if self.is_owner:
+            self.button_start.destroy()
+            
+        self.on_turn = on_turn
+        self.turn_label = Tkinter.Label(self.frame_player,
+                                        text='Turn: %s' % self.on_turn)
+        self.turn_label.grid(row=self.height+2, columnspan=self.width)
+        # Initialize fields for other players
+        for player in self.players:
+            self.fields[player] = common.Field(self.width, self.height)
+    
     def update_buttons(self):
         for key, value in self.fields[self.client_name].field_dict.items():
             self.player_buttons[key].change_color(value)
         if self.on_turn is not None and self.opponent is not None:
             for button in self.opponent_buttons.values():
-                button.change_color(common.FIELD_UNKNOWN)
+                if self.spectator:
+                    button.change_color(common.FIELD_WATER)
+                else:
+                    button.change_color(common.FIELD_UNKNOWN)
             for key, value in self.fields[self.opponent].field_dict.items():
                 self.opponent_buttons[key].change_color(value)
     
@@ -532,16 +580,35 @@ class GameWindow(object):
                 self.on_turn = None
             else:
                 self.on_turn = msg_parts[1]
+            self.ready_event.set()
         
         # If got field, update field
         if msg_parts[0] == common.RSP_FIELD:
+            field = self.fields[self.client_name]
             for item in msg_parts[1:]:
                 item_parts = item.split(common.FIELD_SEP)
-                field = self.fields[self.client_name]
                 for item in item_parts:
                     field.add_item(int(item_parts[0]), int(item_parts[1]),
                                    item_parts[2])
-                self.update_buttons()
+            self.update_buttons()
+        
+        if msg_parts[0] == common.RSP_HITS:
+            for hit in msg_parts[1:]:
+                self.fields[hit[0]].add_item(*hit[1:])
+            self.update_buttons()
+
+        # If got fields, update fields
+        if msg_parts[0] == common.RSP_ALL_FIELDS:
+            for item in msg_parts[1:]:
+                item_parts = item.split(common.FIELD_SEP)
+                if len(item_parts) == 1:
+                    current_player = item_parts[0]
+                    field = self.fields[current_player]
+                else:
+                    for item in item_parts:
+                        field.add_item(int(item_parts[0]), int(item_parts[1]),
+                                       item_parts[2])
+            self.update_buttons()
         
         # If response with ready, get ready
         if msg_parts[0] == common.RSP_READY:
@@ -600,22 +667,7 @@ class GameWindow(object):
             self.players_ready.add(msg_parts[1])
 
         if msg_parts[0] == common.E_GAME_STARTS:
-            self.ready_label.destroy()
-            self.button_ready.destroy()
-            try:
-                self.ready_label_op.destroy()
-            except AttributeError:
-                pass
-            if self.is_owner:
-                self.button_start.destroy()
-            
-            self.on_turn = msg_parts[1]
-            self.turn_label = Tkinter.Label(self.frame_player,
-                                            text='Turn: %s' % self.on_turn)
-            self.turn_label.grid(row=self.height+2, columnspan=self.width)
-            # Initialize fields for other players
-            for player in self.players:
-                self.fields[player] = common.Field(self.width, self.height)
+            self.at_game_start(msg_parts[1])
         
         if msg_parts[0] == common.E_ON_TURN:
             self.on_turn = msg_parts[1]

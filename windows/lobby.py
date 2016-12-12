@@ -274,7 +274,16 @@ class LobbyWindow(object):
                      [self.server_name, common.KEY_GAMES], self.client_queue)
 
     def spectate_game(self):
-        pass
+        '''Send spectate game request to server.
+        '''
+        if self.listbox_closed.curselection() == ():
+            return
+        gamename = self.listbox_closed.get(self.listbox_closed.curselection())
+        
+        # Sending request to create game
+        send_message(self.channel,
+                     [common.REQ_SPECTATE_GAME, gamename, self.client_name],
+                     [self.server_name, common.KEY_GAMES], self.client_queue)
     
     def on_response(self, ch, method, properties, body):
         '''React on server response.
@@ -307,8 +316,17 @@ class LobbyWindow(object):
         if msg_parts[0] == common.RSP_GAME_ENTERED:
             # If game entered, hide lobby window and put event for the game
             # window with necessary arguments (server name, client name, game 
-            # name, is_owner)
+            # name, is_owner, spectator)
             self.hide()
             self.events.put(('game', threading.current_thread(),
                              [self.server_name, self.client_name, 
-                              msg_parts[1], int(msg_parts[2])]))
+                              msg_parts[1], int(msg_parts[2]), False]))
+
+        if msg_parts[0] == common.RSP_GAME_SPECTATING:
+            # If game entered, hide lobby window and put event for the game
+            # window with necessary arguments (server name, client name, game 
+            # name, is_owner, spectator)
+            self.hide()
+            self.events.put(('game', threading.current_thread(),
+                             [self.server_name, self.client_name, 
+                              msg_parts[1], int(msg_parts[2]), True]))
