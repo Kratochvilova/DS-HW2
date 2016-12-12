@@ -110,3 +110,23 @@ def send_message(channel, msg_args, routing_args, reply_to=None):
                           properties=properties, body=message)
     LOG.debug('Sent message to "%s": "%s"', routing_key, message)
 
+# Common classes --------------------------------------------------------------
+class Field(object):
+    def __init__(self, player, width, height):
+        self.player = player
+        self.width = width
+        self.height = height
+        self.field_dict = {}
+
+    def add_item(self, row, column, item):
+        if row < 0 or row > self.height or column < 0 or column > self.width:
+            return False
+        
+        self.field_dict[(row, column)] = item
+        return True
+
+    def get_item(self, row, column):
+        if row < 0 or row > self.height or column < 0 or column > self.width:
+            return None
+        
+        return self.field_dict[(row, column)]
