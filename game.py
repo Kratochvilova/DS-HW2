@@ -34,6 +34,7 @@ class Game(threading.Thread):
         self.players[self.owner] = {}
         self.on_turn = None
         self.player_hits = {}
+        self.client_queues = {}
         
         # Communication
         self.server_name = server_args.name
@@ -127,6 +128,27 @@ class Game(threading.Thread):
             pass
         return result
 
+    def player_left(self, player):
+        '''Actions on player leaving or disconnecting from the game
+        @param player: name of player
+        '''
+        # Remove player's client queue
+        del self.client_queues[player]
+        
+        # If noone is in the game
+        if len(self.client_queues.keys()) == 0:
+            # Quit game
+            self.channel.stop_consuming()
+            self.game_list.remove_game(self.name)
+        
+        # Else we might need to change the owner
+        elif self.owner == player:
+            new_owner = random.choice(self.client_queues.keys())
+            self.owner = new_owner
+            # Send event that owner changed
+            send_message(self.channel, [common.E_NEW_OWNER, new_owner],
+                         [self.server_name, self.name, common.KEY_GAME_EVENTS])
+
     def process_request(self, ch, method, properties, body):
         '''Process game request.
         @param ch: pika.BlockingChannel
@@ -142,19 +164,7 @@ class Game(threading.Thread):
         # Disconnect request
         if msg_parts[0] == common.REQ_DISCONNECT:
             response = common.RSP_DISCONNECTED
-            if len(self.players.keys()) <= 1:
-                # Quit game
-                self.channel.stop_consuming()
-                self.game_list.remove_game(self.name)
-                
-            elif self.owner == msg_parts[1]:
-                rest = [p for p in self.players.keys() if p != msg_parts[1]]
-                new_owner = random.choice(rest)
-                self.owner = new_owner
-                # Send event that owner changed
-                send_message(self.channel, [common.E_NEW_OWNER, new_owner],
-                             [self.server_name, self.name,
-                              common.KEY_GAME_EVENTS])
+            self.player_left(msg_parts[1])
         
         # Leave game request
         if msg_parts[0] == common.REQ_LEAVE_GAME:
@@ -166,21 +176,9 @@ class Game(threading.Thread):
                 except KeyError:
                     pass
                 response = common.RSP_GAME_LEFT
+                self.player_left(msg_parts[1])
                 # Send event that player left
                 send_message(self.channel, [common.E_PLAYER_LEFT,msg_parts[1]],
-                             [self.server_name, self.name,
-                              common.KEY_GAME_EVENTS])
-                
-                if len(self.players.keys()) == 0:
-                    # Quit game
-                    self.channel.stop_consuming()
-                    self.game_list.remove_game(self.name)
-                
-                elif self.owner == msg_parts[1]:
-                    new_owner = random.choice(self.players.keys())
-                    self.owner = new_owner
-                    # Send event that owner changed
-                    send_message(self.channel, [common.E_NEW_OWNER, new_owner],
                              [self.server_name, self.name,
                               common.KEY_GAME_EVENTS])
                                                

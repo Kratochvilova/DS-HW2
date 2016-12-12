@@ -119,6 +119,7 @@ class GameList():
             else:
                 game = self.add_game(*msg_parts[1:])
                 game.wait_for_ready()
+                game.client_queues[msg_parts[2]] = properties.reply_to
                 response = common.SEP.join([common.RSP_GAME_ENTERED, 
                                             msg_parts[1], '1'])
         
@@ -133,6 +134,8 @@ class GameList():
             else:
                 if msg_parts[2] not in self.games[msg_parts[1]].players:
                     self.games[msg_parts[1]].players[msg_parts[2]] = {}
+                    self.games[msg_parts[1]].client_queues[msg_parts[2]] =\
+                        properties.reply_to
                     # Send event that new player was added
                     send_message(self.channel,
                                  [common.E_NEW_PLAYER, msg_parts[2]],
