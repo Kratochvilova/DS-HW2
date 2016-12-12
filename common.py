@@ -58,7 +58,8 @@ REQ_GET_PLAYERS = 'get players'
 REQ_GET_PLAYERS_READY = 'get players ready'
 REQ_GET_OWNER = 'get owner'
 REQ_GET_TURN = 'get turn'
-REQ_GET_FIELDS = 'get fields'
+REQ_GET_FIELD = 'get field'
+REQ_GET_HITS = 'get hits'
 REQ_SET_READY = 'set ready'
 REQ_START_GAME = 'start game'
 REQ_SHOOT = 'shoot'
@@ -69,7 +70,8 @@ RSP_LIST_PLAYERS = 'list players'
 RSP_LIST_PLAYERS_READY = 'list players ready'
 RSP_OWNER = 'owner'
 RSP_TURN = 'turn'
-RSP_FIELDS = 'fields'
+RSP_FIELD = 'field'
+RSP_HITS = 'hits'
 RSP_READY = 'ready'
 RSP_SHIPS_INCORRECT = 'ships incorrect'
 RSP_NOT_ALL_READY = 'not all ready'
@@ -93,7 +95,13 @@ RSP_INVALID_REQUEST = 'invalid request'
 
 # Separator -------------------------------------------------------------------
 SEP = ':'
-BUTTON_SEP = ','
+FIELD_SEP = ','
+
+# Field item types ------------------------------------------------------------
+FIELD_WATER = 'water'
+FIELD_SHIP = 'ship'
+FIELD_HIT_SHIP = 'hit_ship'
+FIELD_UNKNOWN = 'unknown'
 
 # Common functions ------------------------------------------------------------
 def send_message(channel, msg_args, routing_args, reply_to=None):
@@ -112,21 +120,65 @@ def send_message(channel, msg_args, routing_args, reply_to=None):
 
 # Common classes --------------------------------------------------------------
 class Field(object):
-    def __init__(self, player, width, height):
-        self.player = player
+    '''Field class.
+    '''
+    def __init__(self, width, height):
+        '''Initialize - field dimensions and dict of items.
+        @param width: width
+        @param height: height
+        '''
         self.width = width
         self.height = height
         self.field_dict = {}
 
     def add_item(self, row, column, item):
+        '''Add item to the dict.
+        @param row: row
+        @param column: column
+        @param item: item
+        @return False if (row, column) out of field, else True
+        '''
         if row < 0 or row > self.height or column < 0 or column > self.width:
             return False
         
         self.field_dict[(row, column)] = item
         return True
 
+    def remove_item(self, row, column):
+        '''Remove item from the dict.
+        @param row: row
+        @param column: column
+        @return False if (row, column) not in field, else True
+        '''
+        if row < 0 or row > self.height or column < 0 or column > self.width:
+            return False
+        
+        if (row, column) not in self.field_dict:
+            return False
+        
+        del self.field_dictself.field_dict[(row, column)]
+        return True
+
+
     def get_item(self, row, column):
+        '''Gets item by position.
+        param row: row
+        @param column: column
+        @return String, item
+        '''
         if row < 0 or row > self.height or column < 0 or column > self.width:
             return None
         
         return self.field_dict[(row, column)]
+
+    def get_all_items(self, item=None):
+        '''Gets all positions of item.
+        @param item: item
+        @return list, positions
+        '''
+        result = []
+        for key, value in self.field_dict.items():
+            if item is None or value == item:
+                result.append(FIELD_SEP.join([str(key[0]), str(key[1]),value]))
+        
+        return result
