@@ -102,6 +102,7 @@ FIELD_SEP = ','
 FIELD_WATER = 'water'
 FIELD_SHIP = 'ship'
 FIELD_HIT_SHIP = 'hit_ship'
+FIELD_SINK_SHIP = 'sink ship'
 FIELD_UNKNOWN = 'unknown'
 
 # Common functions ------------------------------------------------------------
@@ -160,19 +161,21 @@ class Field(object):
         del self.field_dict[(row, column)]
         return True
 
-    def hit_ship(self, row, column):
-        '''Change ship to hit ship.
+    def change_item(self, row, column, old, new):
+        '''Change item.
         @param row: row
-        @param column: column        
+        @param column: column   
+        @param old: old item
+        @param new: new item
         '''
         if row < 0 or row > self.height or column < 0 or column > self.width:
             return False
         if (row, column) not in self.field_dict:
             return False
-        if self.field_dict[(row, column)] != FIELD_SHIP:
+        if self.field_dict[(row, column)] != old:
             return False
         
-        self.field_dict[(row, column)] = FIELD_HIT_SHIP
+        self.field_dict[(row, column)] = new
         return True
     
     def get_item(self, row, column):

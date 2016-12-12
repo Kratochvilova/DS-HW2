@@ -40,6 +40,7 @@ class GameButton(Tkinter.Button):
             common.FIELD_WATER: '#675BEB',
             common.FIELD_SHIP: '#A56721',
             common.FIELD_HIT_SHIP: '#C00000',
+            common.FIELD_SINK_SHIP: '#000000',
             common.FIELD_UNKNOWN: '#E4E4E4',
             'shot': '#A1A1A1'}
         
@@ -464,6 +465,8 @@ class GameWindow(object):
         for key, value in self.fields[self.client_name].field_dict.items():
             self.player_buttons[key].change_color(value)
         if self.on_turn is not None and self.opponent is not None:
+            for button in self.opponent_buttons.values():
+                button.change_color(common.FIELD_UNKNOWN)
             for key, value in self.fields[self.opponent].field_dict.items():
                 self.opponent_buttons[key].change_color(value)
     
@@ -547,9 +550,11 @@ class GameWindow(object):
         # If response shot
         if msg_parts[0] == common.RSP_HIT:
             field = self.fields[msg_parts[2]]
-            field.add_item(int(msg_parts[3]), int(msg_parts[4]),
-                           common.FIELD_HIT_SHIP)
-            self.update_buttons()
+            if field.get_item(int(msg_parts[3]), int(msg_parts[4])) !=\
+                common.FIELD_SINK_SHIP:
+                field.add_item(int(msg_parts[3]), int(msg_parts[4]),
+                               common.FIELD_HIT_SHIP)
+                self.update_buttons()
             # TODO: inform who shot
         
         if msg_parts[0] == common.RSP_MISS:
@@ -618,3 +623,11 @@ class GameWindow(object):
             self.turn_label = Tkinter.Label(self.frame_player,
                                             text='Turn: %s' % self.on_turn)
             self.turn_label.grid(row=self.height+2, columnspan=self.width)
+
+        if msg_parts[0] == common.E_SINK:
+            field = self.fields[msg_parts[1]]
+            for sink_ship in msg_parts[2:]:
+                sink_ship_pos = sink_ship.split(common.FIELD_SEP)
+                field.add_item(int(sink_ship_pos[0]), int(sink_ship_pos[1]),
+                               common.FIELD_SINK_SHIP)
+            self.update_buttons()

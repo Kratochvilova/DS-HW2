@@ -136,28 +136,58 @@ class Game(threading.Thread):
             return result
         return self.player_hits[player]
     
-    def check_ship_sinked(self, field, row, column, searched):
+    def check_sink_ship(self, field, row, column, searched, hit_ships):
+        '''Check recursively if the ship sunk.
+        @param field: Field
+        @param row: row
+        @param column: column
+        @param searched: list of searched positions
+        @hit_ships: list of positions where the ship has been hit
+        @return None if found position where the ship is still unhit, list of
+        hit_ships otherwise
+        '''
         searched.append((row, column))
         if field.get_item(row, column) == common.FIELD_SHIP:
-            return False
+            return None
         if field.get_item(row, column) == common.FIELD_HIT_SHIP:
+            hit_ships.append((row, column))
             if (row-1, column) not in searched:
-                result = self.check_ship_sinked(field, row-1, column, searched)
-                if result is False:
-                    return False
+                result = self.check_sink_ship(field, row-1, column, 
+                                              searched, hit_ships)
+                if result is None:
+                    return None
             if (row+1, column) not in searched:
-                result = self.check_ship_sinked(field, row+1, column, searched)
-                if result is False:
-                    return False
+                result = self.check_sink_ship(field, row+1, column,
+                                              searched, hit_ships)
+                if result is None:
+                    return None
             if (row, column-1) not in searched:
-                result = self.check_ship_sinked(field, row, column-1, searched)
-                if result is False:
-                    return False
+                result = self.check_sink_ship(field, row, column-1,
+                                              searched, hit_ships)
+                if result is None:
+                    return None
             if (row, column+1) not in searched:
-                result = self.check_ship_sinked(field, row, column+1, searched)
-                if result is False:
-                    return False
-        return True
+                result = self.check_sink_ship(field, row, column+1,
+                                              searched, hit_ships)
+                if result is None:
+                    return None
+
+        return hit_ships
+    
+    def sink_ship(self, field, hit_ships):
+        '''Make ship sinked.
+        @param field: Field
+        @param hit_ships: list of positions where the ship has been hit
+        @return list of strings encoding positions where the ship has been hit
+        '''
+        # Make ship sinked and make strings
+        hit_ships_string = []
+        for ship in hit_ships:
+            hit_ships_string.append(
+                str(ship[0]) + common.FIELD_SEP + str(ship[1]))
+            field.change_item(ship[0], ship[1], common.FIELD_HIT_SHIP,
+                              common.FIELD_SINK_SHIP)
+        return hit_ships_string
     
     def check_end_game(self):
         number_unfinished_players = 0
@@ -309,18 +339,25 @@ class Game(threading.Thread):
                 if item is None:
                     response = common.SEP.join([common.RSP_MISS]+msg_parts[1:])
                 else:
-                    self.fields[msg_parts[2]].hit_ship(int(msg_parts[3]),
-                                                       int(msg_parts[4]))
+                    self.fields[msg_parts[2]].change_item(
+                        int(msg_parts[3]), int(msg_parts[4]),
+                        common.FIELD_SHIP, common.FIELD_HIT_SHIP)
                     response = common.SEP.join([common.RSP_HIT]+msg_parts[1:])
                     # Notify the hit player
                     send_message(self.channel, [common.RSP_HIT]+msg_parts[1:],
                                  [self.client_queues[msg_parts[2]]])
                     
                     # Check if ship sinked
-                    if self.check_ship_sinked(self.fields[msg_parts[2]],
-                                              int(msg_parts[3]), int(msg_parts[4]),
-                                              []):
-                        print('SINKED')
+                    ships = self.check_sink_ship(self.fields[msg_parts[2]],
+                                                 int(msg_parts[3]),
+                                                 int(msg_parts[4]), [], [])
+                    if ships is not None:
+                        ships_string= self.sink_ship(self.fields[msg_parts[2]],
+                                                     ships)
+                        send_message(self.channel, [common.E_SINK,
+                                     msg_parts[2]] + ships_string,
+                                     [self.server_name, self.name,
+                                      common.KEY_GAME_EVENTS])
                     # Check end-game condition
                     if self.check_end_game():
                         send_message(self.channel, [common.E_END_GAME],
