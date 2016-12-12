@@ -39,7 +39,8 @@ class GameButton(Tkinter.Button):
             'water': '#675BEB',
             'ship': '#A56721',
             'hit ship': '#C00000',
-            'unknown': '#E4E4E4'}
+            'unknown': '#E4E4E4',
+            'shot': '#A1A1A1'}
         
         if self.parent == 'player':
             self.change_color('water')
@@ -86,7 +87,26 @@ class GameButton(Tkinter.Button):
                 self.game_window.ready_label.grid(
                     row=self.game_window.height+2,
                     columnspan=self.game_window.width)
-
+        
+        # If game started and on turn
+        if self.game_window.on_turn == self.game_window.client_name:
+            if self.parent == 'player' or self.game_window.opponent == None:
+                return
+            
+            # Dont allow shooting at known positions
+            if self.color != 'unknown':
+                return
+            
+            # Mark as shot and send request to server
+            self.change_color('shot')
+            send_message(self.game_window.channel,
+                         [common.REQ_SHOOT, self.game_window.client_name,
+                          self.game_window.opponent,
+                          str(self.row), str(self.column)],
+                         [self.game_window.server_name,
+                          self.game_window.game_name],
+                          self.game_window.client_queue)
+        
 class GameWindow(object):
     '''Window for displaying game.
     '''
@@ -115,6 +135,7 @@ class GameWindow(object):
         
         # Fields
         self.buttons = {}
+        self.opponent = None
         
         # Queue of events for window control
         self.events = events
@@ -184,6 +205,7 @@ class GameWindow(object):
         self.send_simple_request(common.REQ_GET_DIMENSIONS)
         self.send_simple_request(common.REQ_GET_PLAYERS)
         self.send_simple_request(common.REQ_GET_PLAYERS_READY)
+        self.send_simple_request(common.REQ_GET_OWNER)
         self.send_simple_request(common.REQ_GET_TURN)
         self.send_name_request(common.REQ_GET_FIELDS)
 
@@ -361,6 +383,7 @@ class GameWindow(object):
         (if playing).
         @param name: name of the selected opponent
         '''
+        self.opponent = name
         if self.on_turn == None:
             if name in self.players_ready:
                 label = 'Ready'
@@ -410,9 +433,10 @@ class GameWindow(object):
         '''
         if self.players.issubset(self.players_ready) and\
             self.client_name in self.players_ready:
-            # TODO: start the game
-            print('GAME STARTS!')
-            pass
+            # Send start game request to server
+            send_message(self.channel,
+                         [common.REQ_START_GAME, self.client_name],
+                         [self.server_name, self.game_name], self.client_queue)
         else:
             tkMessageBox.showinfo('Game', 'Not all players are ready')
     
@@ -454,6 +478,24 @@ class GameWindow(object):
                 self.button_ready.config(bg='#68c45c',
                                          activebackground = '#68c45c')
         
+        # If got owner, set if is_owner
+        if msg_parts[0] == common.RSP_OWNER:
+            if msg_parts[1] == self.client_name:
+                if not self.is_owner:
+                    # Display owner-specific widgets
+                    self.button_start = Tkinter.Button(self.frame_player, 
+                                                       text="Start game", 
+                                                       command=self.start_game)
+                    self.button_start.grid(row=self.height+4,
+                                           columnspan=self.width)
+                                           
+                    self.button_kick = Tkinter.Button(self.frame_opponent, 
+                                                      text="Kick out", 
+                                                      command=self.kick_out)
+                    self.button_kick.grid(row=self.height+3,
+                                          columnspan=self.width)
+                self.is_owner = 1
+        
         # If got current turn info, update on_turn
         if msg_parts[0] == common.RSP_TURN:
             if len(msg_parts) == 1:
@@ -473,6 +515,10 @@ class GameWindow(object):
         # If response with ready, get ready
         if msg_parts[0] == common.RSP_READY:
             self.players_ready.add(self.client_name)
+        
+        # If response shot
+        if msg_parts[0] == common.RSP_SHOT:
+            print 'SHOT'
     
     def on_event(self, ch, method, properties, body):
         '''React on game event.
@@ -509,3 +555,25 @@ class GameWindow(object):
         
         if msg_parts[0] == common.E_PLAYER_READY:
             self.players_ready.add(msg_parts[1])
+
+        if msg_parts[0] == common.E_GAME_STARTS:
+            self.ready_label.destroy()
+            self.button_ready.destroy()
+            try:
+                self.ready_label_op.destroy()
+            except AttributeError:
+                pass
+            if self.is_owner:
+                self.button_start.destroy()
+            
+            self.on_turn = msg_parts[1]
+            self.turn_label = Tkinter.Label(self.frame_player,
+                                            text='Turn: %s' % self.on_turn)
+            self.turn_label.grid(row=self.height+2, columnspan=self.width)
+        
+        if msg_parts[0] == common.E_ON_TURN:
+            self.on_turn = msg_parts[1]
+            self.turn_label.destroy()
+            self.turn_label = Tkinter.Label(self.frame_player,
+                                            text='Turn: %s' % self.on_turn)
+            self.turn_label.grid(row=self.height+2, columnspan=self.width)

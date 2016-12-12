@@ -200,6 +200,10 @@ class Game(threading.Thread):
             ready = [p for p in self.players if self.players[p] != {}]
             response = common.SEP.join([common.RSP_LIST_PLAYERS_READY] + ready)
         
+        # Get owner request
+        if msg_parts[0] == common.REQ_GET_OWNER:
+            response = common.SEP.join([common.RSP_OWNER, self.owner])
+        
         # Get turn request
         if msg_parts[0] == common.REQ_GET_TURN:
             if self.on_turn == None:
@@ -224,7 +228,33 @@ class Game(threading.Thread):
                              [common.E_PLAYER_READY, msg_parts[1]],
                              [self.server_name, self.name,
                               common.KEY_GAME_EVENTS])
-
+        
+        # Start game request
+        if msg_parts[0] == common.REQ_START_GAME:
+            response = common.RSP_OK
+            for player_field in self.players.values():
+                if player_field == {}:
+                    response = common.RSP_NOT_ALL_READY
+            if response == common.RSP_OK:
+                self.on_turn = self.owner
+                # Send event that game starts
+                send_message(self.channel,
+                             [common.E_GAME_STARTS, self.on_turn],
+                             [self.server_name, self.name,
+                              common.KEY_GAME_EVENTS])
+        
+        # Shoot request
+        if msg_parts[0] == common.REQ_SHOOT:
+            if msg_parts[1] != self.on_turn:
+                response = common.RSP_NOT_ON_TURN
+            else:
+                response = common.RSP_SHOT
+                # TODO: determine hit
+                # TODO: notify msg_parts[2]
+                # TODO: send event if ship sinked
+                # TODO: check end-game condition
+                # TODO: change turn
+        
         # Sending response
         ch.basic_publish(exchange='direct_logs',
                          routing_key=properties.reply_to,
