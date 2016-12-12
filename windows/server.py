@@ -6,7 +6,8 @@ Created on Tue Dec  6 21:29:21 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen, send_message
+from common import send_message
+from . import listen
 import threading
 import Tkinter
 import tkMessageBox

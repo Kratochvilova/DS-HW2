@@ -6,7 +6,7 @@ Created on Sat Dec 10 12:54:37 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from windows import send_message
+from common import send_message
 import random
 import pika
 import threading
@@ -30,8 +30,9 @@ class Game(threading.Thread):
         self.height = height
         self.ship_number = int(self.width) * int(self.height) / 3
         self.owner = owner
-        self.players = {}
-        self.players[self.owner] = {}
+        self.players = set()
+        self.fields = {}
+        self.players.add(self.owner)
         self.on_turn = None
         self.player_hits = {}
         self.client_queues = {}
@@ -96,7 +97,7 @@ class Game(threading.Thread):
             return False
         
         for ship in ships:
-            ship_position = ship.split(common.BUTTON_SEP)
+            ship_position = ship.split(common.FIELD_SEP)
             if int(ship_position[0]) < 0 or int(ship_position[1]) < 0 or\
                 int(ship_position[0]) > self.height or\
                 int(ship_position[1]) > self.width:
@@ -105,29 +106,34 @@ class Game(threading.Thread):
         return True
     
     def add_ships(self, player, ships):
-        '''Add ships to player.
+        '''Add ships to player field.
+        @param player: player name
         @param ships: list of tuples (row, column)
         '''
+        self.fields[player] = common.Field(self.width, self.height)
         for ship in ships:
-            ship_position = ship.split(common.BUTTON_SEP)
-            self.players[player][(ship_position[0], ship_position[1])] = 'ship'
+            ship_position = ship.split(common.FIELD_SEP)
+            self.fields[player].add_item(ship_position[0], ship_position[1],
+                                         common.FIELD_SHIP)
 
-    def get_fields(self, player):
+    def get_field(self, player):
         '''Get field information for specific player.
         @param player: player
         '''
         result = []
-        for position, value in self.players[player].items():
-            result.append(common.BUTTON_SEP.join([player, position[0],
-                                                 position[1], value]))
-        try:
-            for position, value in self.player_hits[player].items():
-                result.append(common.BUTTON_SEP.join([value[0], position[0],
-                                                     position[1], value[1]]))
-        except KeyError:
-            pass
-        return result
+        if player not in self.fields:
+            return result
+        return self.fields[player].get_all_items()
 
+    def get_hits(self, player):
+        '''Get hit information for specific player.
+        @param player: player
+        '''
+        result = []
+        if player not in self.player_hits:
+            return result
+        return self.player_hits[player]
+    
     def player_left(self, player):
         '''Actions on player leaving or disconnecting from the game
         @param player: name of player
@@ -172,8 +178,8 @@ class Game(threading.Thread):
                 response = common.RSP_INVALID_REQUEST
             else:
                 try:
-                    del self.players[msg_parts[1]]
-                except KeyError:
+                    self.players.remove(msg_parts[1])
+                except ValueError:
                     pass
                 response = common.RSP_GAME_LEFT
                 self.player_left(msg_parts[1])
@@ -191,11 +197,11 @@ class Game(threading.Thread):
         # Get players request
         if msg_parts[0] == common.REQ_GET_PLAYERS:
             response = common.SEP.join([common.RSP_LIST_PLAYERS] +\
-                                        self.players.keys())
+                                        list(self.players))
 
         # Get players ready request
         if msg_parts[0] == common.REQ_GET_PLAYERS_READY:
-            ready = [p for p in self.players if self.players[p] != {}]
+            ready = [p for p in self.fields if self.fields[p] != {}]
             response = common.SEP.join([common.RSP_LIST_PLAYERS_READY] + ready)
         
         # Get owner request
@@ -210,10 +216,15 @@ class Game(threading.Thread):
                 response = common.RSP_TURN + common.SEP + self.on_turn
         
         # Get field request
-        if msg_parts[0] == common.REQ_GET_FIELDS:
-            response = common.SEP.join([common.RSP_FIELDS] +\
-                                        self.get_fields(msg_parts[1]))
+        if msg_parts[0] == common.REQ_GET_FIELD:
+            response = common.SEP.join([common.RSP_FIELD] +\
+                                        self.get_field(msg_parts[1]))
 
+        # Get hits request
+        if msg_parts[0] == common.REQ_GET_HITS:
+            response = common.SEP.join([common.RSP_FIELD] +\
+                                        self.get_hits(msg_parts[1]))        
+        
         # Set ready request
         if msg_parts[0] == common.REQ_SET_READY:
             if not self.check_ships(msg_parts[2:]):
@@ -230,10 +241,13 @@ class Game(threading.Thread):
         # Start game request
         if msg_parts[0] == common.REQ_START_GAME:
             response = common.RSP_OK
-            for player_field in self.players.values():
-                if player_field == {}:
-                    response = common.RSP_NOT_ALL_READY
-            if response == common.RSP_OK:
+            if not self.players.issubset(set(self.fields.keys())):
+                response = common.RSP_NOT_ALL_READY
+            else:
+                self.state = 'closed'
+                # Send event about game start
+                send_message(self.channel, [self.name],
+                             [self.server_name, common.KEY_GAME_CLOSE])
                 self.on_turn = self.owner
                 # Send event that game starts
                 send_message(self.channel,
@@ -246,9 +260,16 @@ class Game(threading.Thread):
             if msg_parts[1] != self.on_turn:
                 response = common.RSP_NOT_ON_TURN
             else:
-                response = common.RSP_SHOT
-                # TODO: determine hit
-                # TODO: notify msg_parts[2]
+                item = self.fields[msg_parts[2]].get_item(msg_parts[3],
+                                                          msg_parts[4])
+                if item is None:
+                    response = common.SEP.join([common.RSP_MISS]+msg_parts[2:])
+                else:
+                    response = common.SEP.join([common.RSP_HIT]+msg_parts[1:])
+                    # Notify the hit player
+                    send_message(self.channel, [common.RSP_HIT]+msg_parts[1:],
+                                 [self.client_queues[msg_parts[2]]])
+                
                 # TODO: send event if ship sinked
                 # TODO: check end-game condition
                 # TODO: change turn

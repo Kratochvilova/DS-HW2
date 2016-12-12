@@ -6,7 +6,8 @@ Created on Fri Dec  9 20:55:58 2016
 """
 # Imports----------------------------------------------------------------------
 import common
-from . import listen, send_message
+from common import send_message
+from . import listen
 import threading
 import Tkinter
 import tkMessageBox
@@ -29,25 +30,28 @@ class GameButton(Tkinter.Button):
         self.parent = parent
         self.game_window = game_window
         
-        self.row = row - 1
+        self.row = row
         self.column = column
         
         self.color = None
         
         # Colors
         self.colors = {
-            'water': '#675BEB',
-            'ship': '#A56721',
-            'hit ship': '#C00000',
-            'unknown': '#E4E4E4',
+            common.FIELD_WATER: '#675BEB',
+            common.FIELD_SHIP: '#A56721',
+            common.FIELD_HIT_SHIP: '#C00000',
+            common.FIELD_UNKNOWN: '#E4E4E4',
             'shot': '#A1A1A1'}
         
         if self.parent == 'player':
-            self.change_color('water')
+            self.change_color(common.FIELD_WATER)
         if self.parent == 'opponent':
-            self.change_color('unknown')
+            self.change_color(common.FIELD_UNKNOWN)
 
     def change_color(self, color):
+        '''Change color of button and its backgrounds.
+        @param color: color
+        '''
         self.color = color
         self.config(bg=self.colors[color],
                     activebackground=self.colors[color])
@@ -62,10 +66,11 @@ class GameButton(Tkinter.Button):
                 return
             
             # Add ship
-            if self.color == 'water' and\
+            if self.color == common.FIELD_WATER and\
                 self.game_window.ships_remaining != 0:
-                self.change_color('ship')
+                self.change_color(common.FIELD_SHIP)
                 self.game_window.ships_remaining -= 1
+                # Update ready_label
                 self.game_window.ready_label.destroy()
                 self.game_window.ready_label = Tkinter.Label(
                     self.game_window.frame_player, 
@@ -74,11 +79,15 @@ class GameButton(Tkinter.Button):
                 self.game_window.ready_label.grid(
                     row=self.game_window.height+2,
                     columnspan=self.game_window.width)
+                # Update field
+                self.game_window.fields[self.game_window.client_name].add_item(
+                    self.row, self.column, common.FIELD_SHIP)
             
             # Remove ship
-            elif self.color == 'ship':
-                self.change_color('water')
+            elif self.color == common.FIELD_SHIP:
+                self.change_color(common.FIELD_WATER)
                 self.game_window.ships_remaining += 1
+                # Update ready_label
                 self.game_window.ready_label.destroy()
                 self.game_window.ready_label = Tkinter.Label(
                     self.game_window.frame_player, 
@@ -87,6 +96,10 @@ class GameButton(Tkinter.Button):
                 self.game_window.ready_label.grid(
                     row=self.game_window.height+2,
                     columnspan=self.game_window.width)
+                # Update field
+                self.game_window.fields[
+                    self.game_window.client_name].remove_item(self.row,
+                                                              self.column)
         
         # If game started and on turn
         if self.game_window.on_turn == self.game_window.client_name:
@@ -134,8 +147,10 @@ class GameWindow(object):
         self.ships_remaining = None
         
         # Fields
-        self.buttons = {}
+        self.player_buttons = {}
+        self.opponent_buttons = {}
         self.opponent = None
+        self.fields = {}
         
         # Queue of events for window control
         self.events = events
@@ -207,7 +222,8 @@ class GameWindow(object):
         self.send_simple_request(common.REQ_GET_PLAYERS_READY)
         self.send_simple_request(common.REQ_GET_OWNER)
         self.send_simple_request(common.REQ_GET_TURN)
-        self.send_name_request(common.REQ_GET_FIELDS)
+        self.send_name_request(common.REQ_GET_FIELD)
+        self.send_name_request(common.REQ_GET_HITS)
 
     def hide(self):
         '''Hide the game window.
@@ -282,6 +298,10 @@ class GameWindow(object):
         self.players = set()
         self.on_turn = None
         self.ships_remaining = None
+        self.player_buttons = {}
+        self.opponent_buttons = {}
+        self.opponent = None
+        self.fields = {}
 
     def set_setting(self, width, height, ships):
         '''Sets all widgets.
@@ -293,17 +313,19 @@ class GameWindow(object):
         self.width = int(width)
         self.height = int(height)
         
+        # Set client field
+        self.fields[self.client_name] = common.Field(self.width, self.height)
+        
         # Player frame
         self.game_label = Tkinter.Label(self.frame_player,
                                         text=self.client_name)
         self.game_label.grid(columnspan=self.width)
         
-        self.buttons[self.client_name] = {}
         for i in range(self.height):
             for j in range(self.width):
-                b = GameButton(self.frame_player, i+1, j, 'player', self)
+                b = GameButton(self.frame_player, i, j, 'player', self)
                 b.grid(row=i+1, column=j)
-                self.buttons[self.client_name][(i+1, j)] = b
+                self.player_buttons[(i, j)] = b
 
         self.ready_label = Tkinter.Label(self.frame_player,
                                          text='Ships remaining: %s' %\
@@ -315,7 +337,6 @@ class GameWindow(object):
         self.button_ready.grid(row=self.height+3, columnspan=self.width)
         
         # Start button in case of owner
-        self.opponent_buttons = []
         if self.is_owner:
             self.button_start = Tkinter.Button(self.frame_player,
                                                text="Start game",
@@ -325,18 +346,22 @@ class GameWindow(object):
         # Opponent frame
         self.opponent_menu = Tkinter.OptionMenu(self.frame_opponent, '', '')
         self.opponent_menu.grid(columnspan=self.width)
-
+        self.opponent_label = Tkinter.Label(self.frame_opponent,
+                                            text='None selected')
+        self.opponent_label.grid(row=1, columnspan=self.width)
+        
         for i in range(self.height):
             for j in range(self.width):
-                b = GameButton(self.frame_opponent, i+1, j, 'opponent',self)
-                b.grid(row=i+1, column=j)
+                b = GameButton(self.frame_opponent, i, j, 'opponent',self)
+                b.grid(row=i+2, column=j)
+                self.opponent_buttons[(i, j)] = b
             
         # Kick button in case of owner
         if self.is_owner:
             self.button_kick = Tkinter.Button(self.frame_opponent, 
                                               text="Kick out", 
                                               command=self.start_game) #TODO
-            self.button_kick.grid(row=self.height+3,
+            self.button_kick.grid(row=self.height+4,
                                   columnspan=self.width)
 
     def add_players(self, names):
@@ -394,22 +419,17 @@ class GameWindow(object):
                 self.ready_label_op.destroy()
             except AttributeError:
                 pass
-            self.ready_label_op = Tkinter.Label(self.frame_opponent, text=label)
-            self.ready_label_op.grid(row=self.height+2, columnspan=self.width)
+            self.ready_label_op = Tkinter.Label(self.frame_opponent,text=label)
+            self.ready_label_op.grid(row=self.height+3, columnspan=self.width)
+            self.opponent_label.destroy()
+            self.opponent_label = Tkinter.Label(self.frame_opponent, text=name)
+            self.opponent_label.grid(row=1, columnspan=self.width)
         else:
             # TODO: actualize opponent field
             pass
     
     def kick_out(self):
         pass
-    
-    def get_ships(self, buttons):
-        result = []
-        for button in buttons:
-            if button.color == 'ship':
-                result.append(str(button.row) + common.BUTTON_SEP +\
-                              str(button.column))
-        return result
     
     def get_ready(self):
         '''Confirm the ship positioning to the server.
@@ -421,13 +441,13 @@ class GameWindow(object):
                  self.ships_remaining)
         else:
             # Send request to server
-            ships = self.get_ships(self.buttons[self.client_name].values())
+            ships = self.fields[self.client_name].get_all_items('ship')
             send_message(self.channel,
                          [common.REQ_SET_READY, self.client_name] + ships,
                          [self.server_name, self.game_name], self.client_queue)
             # Color the button
             self.button_ready.config(bg='#68c45c',activebackground = '#68c45c')
-        
+    
     def start_game(self):
         '''Check if all players are ready and start the game.
         '''
@@ -492,7 +512,7 @@ class GameWindow(object):
                     self.button_kick = Tkinter.Button(self.frame_opponent, 
                                                       text="Kick out", 
                                                       command=self.kick_out)
-                    self.button_kick.grid(row=self.height+3,
+                    self.button_kick.grid(row=self.height+4,
                                           columnspan=self.width)
                 self.is_owner = 1
         
@@ -503,22 +523,33 @@ class GameWindow(object):
             else:
                 self.on_turn = msg_parts[1]
         
-        # If got fields, update fields
-        if msg_parts[0] == common.RSP_FIELDS:
+        # If got field, update field
+        if msg_parts[0] == common.RSP_FIELD:
             for item in msg_parts[1:]:
-                item_parts = item.split(common.BUTTON_SEP)
-                for button in self.buttons[item_parts[0]].values():
-                    if button.row == int(item_parts[1]) and\
-                        button.column == int(item_parts[2]):
-                        button.change_color(item_parts[3])
+                item_parts = item.split(common.FIELD_SEP)
+                field = self.fields[self.client_name]
+                for item in item_parts:
+                    field.add_item(int(item_parts[0]), int(item_parts[1]),
+                                   item_parts[2])
+                # TODO: update buttons if necessary
         
         # If response with ready, get ready
         if msg_parts[0] == common.RSP_READY:
             self.players_ready.add(self.client_name)
         
         # If response shot
-        if msg_parts[0] == common.RSP_SHOT:
-            print 'SHOT'
+        if msg_parts[0] == common.RSP_HIT:
+            field = self.fields[msg_parts[2]]
+            field.add_item(int(msg_parts[3]), int(msg_parts[4]),
+                           common.FIELD_HIT_SHIP)
+            # TODO: update buttons if necessary
+            # TODO: inform who shot
+        
+        if msg_parts[0] == common.RSP_MISS:
+            field = self.fields[msg_parts[2]]
+            field.add_item(int(msg_parts[3]), int(msg_parts[4]),
+                           common.FIELD_WATER)
+            # TODO: update buttons if necessary
     
     def on_event(self, ch, method, properties, body):
         '''React on game event.
@@ -549,7 +580,7 @@ class GameWindow(object):
                     self.button_kick = Tkinter.Button(self.frame_opponent, 
                                                       text="Kick out", 
                                                       command=self.kick_out)
-                    self.button_kick.grid(row=self.height+3,
+                    self.button_kick.grid(row=self.height+4,
                                           columnspan=self.width)
                 self.is_owner = 1
         

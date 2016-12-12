@@ -12,8 +12,8 @@ LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
 import common
+from common import send_message
 from game import Game
-from windows import send_message
 from argparse import ArgumentParser
 from time import sleep
 import threading
@@ -133,7 +133,7 @@ class GameList():
                 response = common.RSP_PERMISSION_DENIED
             else:
                 if msg_parts[2] not in self.games[msg_parts[1]].players:
-                    self.games[msg_parts[1]].players[msg_parts[2]] = {}
+                    self.games[msg_parts[1]].players.add(msg_parts[2])
                     self.games[msg_parts[1]].client_queues[msg_parts[2]] =\
                         properties.reply_to
                     # Send event that new player was added
