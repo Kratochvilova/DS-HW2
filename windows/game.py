@@ -192,7 +192,8 @@ class GameWindow(object):
     def show(self, arguments):
         '''Show the game window.
         @param arguments: arguments passed from previous window: 
-                          [server_name, client username, game name, is_owner]
+                          [server_name, client username, game name, is_owner,
+                          spectator, spectator_queue]
         '''
         LOG.debug('Showing game window.')
         self.server_name = arguments[0]
@@ -200,6 +201,7 @@ class GameWindow(object):
         self.game_name = arguments[2]
         self.is_owner = arguments[3]
         self.spectator = arguments[4]
+        self.spectator_queue = arguments[5]
         self.on_show()
         self.root.deiconify()
 
@@ -215,6 +217,10 @@ class GameWindow(object):
                                 routing_key=self.server_name + common.SEP +\
                                     self.game_name + common.SEP +\
                                     common.KEY_GAME_EVENTS)
+        if self.spectator:
+            self.channel.queue_bind(exchange='direct_logs',
+                                    queue=self.events_queue,
+                                    routing_key=self.spectator_queue)
         # Set consuming
         self.channel.basic_consume(self.on_response, 
                                    queue=self.client_queue,
@@ -676,6 +682,11 @@ class GameWindow(object):
                                             text='Turn: %s' % self.on_turn)
             self.turn_label.grid(row=self.height+2, columnspan=self.width)
 
+        if msg_parts[0] == common.E_HIT:
+            self.fields[msg_parts[2]].add_item(int(msg_parts[3]),
+                                               int(msg_parts[4]),
+                                               common.FIELD_HIT_SHIP)
+        
         if msg_parts[0] == common.E_SINK:
             field = self.fields[msg_parts[1]]
             for sink_ship in msg_parts[2:]:

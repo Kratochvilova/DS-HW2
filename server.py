@@ -155,9 +155,11 @@ class GameList():
             elif msg_parts[2] in self.games[msg_parts[1]].players:
                 response = common.RSP_PERMISSION_DENIED
             else:
-                self.games[msg_parts[1]].spectators.add(msg_parts[2])
+                game = self.games[msg_parts[1]]
+                game.spectators.add(msg_parts[2])
                 response = common.SEP.join([common.RSP_GAME_SPECTATING, 
-                                            msg_parts[1], '0'])
+                                            msg_parts[1], '0',
+                                            game.spectator_queue])
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',

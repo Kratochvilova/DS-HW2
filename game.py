@@ -73,8 +73,7 @@ class Game(threading.Thread):
             self.channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.spectator_queue,
-                                routing_key=common.SEP.join([self.server_name,
-                                        self.name, common.KEY_GAME_EVENTS]))
+                                routing_key=self.spectator_queue)
         
         # Control queue for quiting consuming
         self.control_queue =\
@@ -374,7 +373,10 @@ class Game(threading.Thread):
                     # Notify the hit player
                     send_message(self.channel, [common.RSP_HIT]+msg_parts[1:],
                                  [self.client_queues[msg_parts[2]]])
-                    
+                    # Send secret event for spectators
+                    send_message(self.channel, [common.E_HIT] + msg_parts[1:],
+                                 [self.spectator_queue])
+                                 
                     # Check if ship sinked
                     ships = self.check_sink_ship(self.fields[msg_parts[2]],
                                                  int(msg_parts[3]),
