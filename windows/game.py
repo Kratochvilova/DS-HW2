@@ -409,7 +409,7 @@ class GameWindow(object):
         @param name: name of the selected opponent
         '''
         self.opponent = name
-        if self.on_turn == None:
+        if self.on_turn is None:
             if name in self.players_ready:
                 label = 'Ready'
             else:
@@ -425,8 +425,7 @@ class GameWindow(object):
             self.opponent_label = Tkinter.Label(self.frame_opponent, text=name)
             self.opponent_label.grid(row=1, columnspan=self.width)
         else:
-            # TODO: actualize opponent field
-            pass
+            self.update_buttons()
     
     def kick_out(self):
         pass
@@ -459,6 +458,13 @@ class GameWindow(object):
                          [self.server_name, self.game_name], self.client_queue)
         else:
             tkMessageBox.showinfo('Game', 'Not all players are ready')
+    
+    def update_buttons(self):
+        for key, value in self.fields[self.client_name].field_dict.items():
+            self.player_buttons[key].change_color(value)
+        if self.on_turn is not None: 
+            for key, value in self.fields[self.opponent].field_dict.items():
+                self.opponent_buttons[key].change_color(value)
     
     def on_response(self, ch, method, properties, body):
         '''React on server response.
@@ -531,7 +537,7 @@ class GameWindow(object):
                 for item in item_parts:
                     field.add_item(int(item_parts[0]), int(item_parts[1]),
                                    item_parts[2])
-                # TODO: update buttons if necessary
+                self.update_buttons()
         
         # If response with ready, get ready
         if msg_parts[0] == common.RSP_READY:
@@ -542,14 +548,14 @@ class GameWindow(object):
             field = self.fields[msg_parts[2]]
             field.add_item(int(msg_parts[3]), int(msg_parts[4]),
                            common.FIELD_HIT_SHIP)
-            # TODO: update buttons if necessary
+            self.update_buttons()
             # TODO: inform who shot
         
         if msg_parts[0] == common.RSP_MISS:
             field = self.fields[msg_parts[2]]
             field.add_item(int(msg_parts[3]), int(msg_parts[4]),
                            common.FIELD_WATER)
-            # TODO: update buttons if necessary
+            self.update_buttons()
     
     def on_event(self, ch, method, properties, body):
         '''React on game event.
@@ -601,6 +607,9 @@ class GameWindow(object):
             self.turn_label = Tkinter.Label(self.frame_player,
                                             text='Turn: %s' % self.on_turn)
             self.turn_label.grid(row=self.height+2, columnspan=self.width)
+            # Initialize fields for other players
+            for player in self.players:
+                self.fields[player] = common.Field(self.width, self.height)
         
         if msg_parts[0] == common.E_ON_TURN:
             self.on_turn = msg_parts[1]
