@@ -5,17 +5,18 @@ Created on Tue Dec 13 11:59:38 2016
 @author: pavla
 """
 # Imports ---------------------------------------------------------------------
-import common
 import functools
-# Logging ---------------------------------------------------------------------
 import logging
+# Custom imports --------------------------------------------------------------
+import common
+# Logging ---------------------------------------------------------------------
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Request functions -----------------------------------------------------------
-def do_str(f):
-    @functools.wraps(f)
+def do_str(func):
+    @functools.wraps(func)
     def wrapped(*args):
-        return common.SEP.join(f(*args))
+        return common.SEP.join(func(*args))
     return wrapped
 
 @do_str

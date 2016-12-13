@@ -1,13 +1,18 @@
+# Imports ---------------------------------------------------------------------
+import threading
+from time import sleep
+# Logging ---------------------------------------------------------------------
 import logging
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 
-import threading
-from time import sleep
-
 counter = 0
 
 def listen(channel, owner=None):
+    '''Start thread that will be listening on channel
+    @param channe: pika.BlockingChannel
+    @param owner: owner of thread
+    '''
     global counter
     def tmp_listen():
         LOG.debug('LISTEN start, owner: %s', owner)
@@ -15,7 +20,7 @@ def listen(channel, owner=None):
         LOG.debug('LISTEN end, owner: %s', owner)
 
     t = threading.Thread(target=tmp_listen, name='Listen-%d'%counter)
-    counter +=1
+    counter += 1
     t.setDaemon(True)
     t.start()
     return t
@@ -25,7 +30,7 @@ def print_threads():
     '''
     while True:
         print
-        print('Active threads:')
+        print 'Active threads:'
         for t in threading.enumerate():
             if t != threading.current_thread():
                 print t

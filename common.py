@@ -6,9 +6,9 @@ Created on Thu Dec  1 21:38:50 2016
 """
 # Imports ---------------------------------------------------------------------
 import functools
+import logging
 import pika
 # Logging ---------------------------------------------------------------------
-import logging
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Connection related constants ------------------------------------------------
@@ -23,10 +23,10 @@ KEY_GAME_ADVERT = 'game advert'
 KEY_GAME_EVENTS = 'game events'
 
 # Routing keys functions ------------------------------------------------------
-def do_str(f):
-    @functools.wraps(f)
+def do_str(func):
+    @functools.wraps(func)
     def wrapped(*args):
-        return SEP.join(f(*args))
+        return SEP.join(func(*args))
     return wrapped
 
 @do_str
@@ -158,7 +158,7 @@ def send_message(channel, message, routing_key, reply_to=None):
     @param routing_key: routing key
     @param reply_to: queue expecting reply
     '''
-    properties = pika.BasicProperties(reply_to = reply_to)
+    properties = pika.BasicProperties(reply_to=reply_to)
     channel.basic_publish(exchange='direct_logs', routing_key=routing_key,
                           properties=properties, body=message)
     LOG.debug('Sent message to "%s": "%s"', routing_key, message)
@@ -185,7 +185,7 @@ class Field(object):
         '''
         if row < 0 or row > self.height or column < 0 or column > self.width:
             return False
-        
+
         self.field_dict[(row, column)] = item
         return True
 
@@ -197,17 +197,17 @@ class Field(object):
         '''
         if row < 0 or row > self.height or column < 0 or column > self.width:
             return False
-        
+
         if (row, column) not in self.field_dict:
             return False
-        
+
         del self.field_dict[(row, column)]
         return True
 
     def change_item(self, row, column, old, new):
         '''Change item.
         @param row: row
-        @param column: column   
+        @param column: column
         @param old: old item
         @param new: new item
         '''
@@ -217,10 +217,10 @@ class Field(object):
             return False
         if self.field_dict[(row, column)] != old:
             return False
-        
+
         self.field_dict[(row, column)] = new
         return True
-    
+
     def get_item(self, row, column):
         '''Gets item by position.
         param row: row
@@ -229,10 +229,10 @@ class Field(object):
         '''
         if row < 0 or row > self.height or column < 0 or column > self.width:
             return None
-        
+
         if (row, column) not in self.field_dict:
             return None
-        
+
         return self.field_dict[(row, column)]
 
     def get_all_items(self, item=None):
@@ -243,6 +243,8 @@ class Field(object):
         result = []
         for key, value in self.field_dict.items():
             if item is None or value == item:
-                result.append(FIELD_SEP.join([str(key[0]), str(key[1]),value]))
-        
+                result.append(
+                    FIELD_SEP.join([str(key[0]), str(key[1]), value])
+                )
+
         return result
