@@ -695,6 +695,17 @@ class GameWindow(object):
                                common.FIELD_SINK_SHIP)
             self.update_buttons()
 
+        if msg_parts[0] == common.E_PLAYER_END:
+            if msg_parts[1] == self.client_name:
+                if tkMessageBox.askyesno('Game', 'You lost! Leave game?'):
+                    self.leave()
+                else:
+                    self.spectator = True
+                    self.send_name_request(common.REQ_GET_SPECTATOR_QUEUE)
+                    self.send_name_request(common.REQ_GET_ALL_FIELDS)
+            else:
+                self.remove_player(msg_parts[1])
+
         if msg_parts[0] == common.E_END_GAME:
             s = self.fields[self.client_name].get_all_items(common.FIELD_SHIP)
             if s != []:

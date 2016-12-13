@@ -200,6 +200,10 @@ class Game(threading.Thread):
                               common.FIELD_SINK_SHIP)
         return hit_ships_string
     
+    def count_player_ships(self, player):
+        ships = self.fields[player].get_all_items(common.FIELD_SHIP)
+        return len(ships)
+    
     def check_end_game(self):
         number_unfinished_players = 0
         for field in self.fields.values():
@@ -311,6 +315,13 @@ class Game(threading.Thread):
                     items = self.fields[player].get_all_items()
                     response += common.SEP + common.SEP.join([player] + items)
         
+        if msg_parts[0] == common.REQ_GET_SPECTATOR_QUEUE:
+            if msg_parts[1] not in self.spectators:
+                response = common.RSP_PERMISSION_DENIED
+            else:
+                response = common.RSP_SPECTATOR_QUEUE + common.SEP +\
+                    self.spectator_queue
+        
         # Set ready request
         if msg_parts[0] == common.REQ_SET_READY:
             if not self.check_ships(msg_parts[2:]):
@@ -388,11 +399,28 @@ class Game(threading.Thread):
                                      msg_parts[2]] + ships_string,
                                      [self.server_name, self.name,
                                       common.KEY_GAME_EVENTS])
-                    # Check end-game condition
-                    if self.check_end_game():
-                        send_message(self.channel, [common.E_END_GAME],
-                                     [self.server_name, self.name,
-                                      common.KEY_GAME_EVENTS])
+                        
+                        if self.count_player_ships(msg_parts[2]) == 0:
+                            self.players.remove(msg_parts[2])
+                            self.spectators.add(msg_parts[2])
+                            send_message(self.channel, [common.E_PLAYER_END,
+                                                        msg_parts[2]],
+                                         [self.server_name, self.name,
+                                          common.KEY_GAME_EVENTS])
+                            if self.on_turn == msg_parts[2]:
+                                # Change turn
+                                i = self.player_order.index(self.on_turn) - 1
+                                if i < 0 :
+                                    i = len(self.player_order)
+                                self.on_turn = self.player_order[i]
+                            del self.player_order[self.player_order.index(
+                                                                msg_parts[2])]
+                            
+                            # Check end-game condition
+                            if self.check_end_game():
+                                send_message(self.channel, [common.E_END_GAME],
+                                             [self.server_name, self.name,
+                                              common.KEY_GAME_EVENTS])
                     
                 # Change turn
                 next_index = self.player_order.index(self.on_turn) + 1
