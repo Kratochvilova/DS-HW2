@@ -90,7 +90,8 @@ class GameList():
     def process_request(self, msg_parts, properties):
         '''Process request about list of games.
         @param msg_parts: parsed message
-        @return list, responses
+        @param properties: pika.spec.BasicProperties
+        @return String, response
         '''
         # Get list of games request
         if msg_parts[0] == common.REQ_LIST_OPENED:

@@ -164,7 +164,7 @@ def make_e_hit(client_name, opponent_name, row, column):
 
 @do_str
 def make_e_sink(player, ship_parts):
-    return common.E_SINK, player, ship_parts
+    return [common.E_SINK, player] + ship_parts
 
 @do_str
 def make_e_player_end(player):

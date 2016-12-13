@@ -27,6 +27,7 @@ class LobbyWindow(object):
         @param server_advertisements: queue for server advertisements
         @param client_queue: queue for messages to client
         @param events: Queue of events for window control
+        @param parent: parent for Tkinter
         '''
         # Next window
         self.server_window = None
