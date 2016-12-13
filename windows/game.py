@@ -330,6 +330,7 @@ class GameWindow(object):
         self.opponent_buttons = {}
         self.opponent = None
         self.fields = {}
+        self.ready_event.clear()
 
     def set_setting(self, width, height, ships):
         '''Sets all widgets.
@@ -653,8 +654,9 @@ class GameWindow(object):
                 field.add_item(int(msg_parts[3]), int(msg_parts[4]),
                                common.FIELD_HIT_SHIP)
                 self.update_buttons()
-            tkMessageBox.showinfo('Game',
-                                  'Your ship was hit by ' % msg_parts[1])
+            if msg_parts[1] != self.client_name:
+                tkMessageBox.showinfo('Game',
+                                      'Your ship was hit by %s' % msg_parts[1])
 
         # Miss
         if msg_parts[0] == common.RSP_MISS:

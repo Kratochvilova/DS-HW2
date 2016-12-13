@@ -135,6 +135,9 @@ class GameList(object):
                 return serverlib.make_rsp_name_doesnt_exist()
             if client_name not in self.clients.client_set:
                 return serverlib.make_rsp_permission_denied()
+            if client_name not in self.games[game_name].players and\
+                self.games[game_name].state == 'closed':
+                return serverlib.make_rsp_permission_denied()
 
             self.games[game_name].client_queues[client_name] =\
                 properties.reply_to
