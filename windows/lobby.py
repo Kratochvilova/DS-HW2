@@ -5,6 +5,7 @@ Created on Tue Dec  7 16:27:21 2016
 @author: pavla
 """
 # Imports----------------------------------------------------------------------
+import clientlib
 import common
 from common import send_message
 from . import listen
@@ -111,20 +112,12 @@ class LobbyWindow(object):
         # Binding queues
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_advertisements,
-                                routing_key=self.server_name + common.SEP +\
-                                    common.KEY_GAMES)
+                                routing_key=common.make_key_games(
+                                      self.server_name))
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_advertisements,
-                                routing_key=self.server_name + common.SEP +\
-                                    common.KEY_GAME_OPEN)
-        self.channel.queue_bind(exchange='direct_logs',
-                                queue=self.game_advertisements,
-                                routing_key=self.server_name + common.SEP +\
-                                    common.KEY_GAME_CLOSE)
-        self.channel.queue_bind(exchange='direct_logs',
-                                queue=self.game_advertisements,
-                                routing_key=self.server_name + common.SEP +\
-                                    common.KEY_GAME_END)
+                                routing_key=common.make_key_game_advert(
+                                      self.server_name))
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.client_queue,
                                 routing_key=self.client_queue)
@@ -154,20 +147,12 @@ class LobbyWindow(object):
         # Unbinding queues
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.game_advertisements,
-                                  routing_key=self.server_name + common.SEP +\
-                                      common.KEY_GAMES)
+                                  routing_key=common.make_key_games(
+                                      self.server_name))
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.game_advertisements,
-                                  routing_key=self.server_name + common.SEP +\
-                                      common.KEY_GAME_OPEN)
-        self.channel.queue_unbind(exchange='direct_logs',
-                                  queue=self.game_advertisements,
-                                  routing_key=self.server_name + common.SEP +\
-                                      common.KEY_GAME_CLOSE)
-        self.channel.queue_unbind(exchange='direct_logs',
-                                  queue=self.game_advertisements,
-                                  routing_key=self.server_name + common.SEP +\
-                                      common.KEY_GAME_END)
+                                  routing_key=common.make_key_game_advert(
+                                      self.server_name))
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.client_queue,
                                   routing_key=self.client_queue)
@@ -180,8 +165,9 @@ class LobbyWindow(object):
     def disconnect(self):
         '''Disconnect from server.
         '''
-        send_message(self.channel, [common.REQ_DISCONNECT, self.client_name],
-                     [self.server_name], self.client_queue)
+        msg = clientlib.make_req_disconnect(self.client_name)
+        routing_key = common.make_key_server(self.server_name)
+        send_message(self.channel, msg, routing_key, self.client_queue)
     
     def add_game(self, name, state):
         '''Add game session name into listbox.
@@ -224,66 +210,66 @@ class LobbyWindow(object):
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        key_parts = method.routing_key.split(common.SEP)
-        if key_parts[1] == common.KEY_GAME_OPEN:
-            self.add_game(body, 'open')
-        if key_parts[1] == common.KEY_GAME_CLOSE:
-            self.remove_game(body, 'open')
-            self.add_game(body, 'close')
-        if key_parts[1] == common.KEY_GAME_END:
-            self.remove_game(body, 'open')
-            self.remove_game(body, 'close')
+        msg_parts = body.split(common.SEP)
+        if msg_parts[0] == common.E_GAME_OPEN:
+            self.add_game(msg_parts[1], 'open')
+        if msg_parts[0] == common.E_GAME_CLOSE:
+            self.remove_game(msg_parts[1], 'open')
+            self.add_game(msg_parts[1], 'close')
+        if msg_parts[0] == common.E_GAME_END:
+            self.remove_game(msg_parts[1], 'open')
+            self.remove_game(msg_parts[1], 'close')
 
     def get_games_list(self):
         '''Send requests to server to get list of all game sessions.
         '''
+        routing_key = common.make_key_games(self.server_name)
         # Sending request to get list of opened games
-        send_message(self.channel, [common.REQ_LIST_OPENED],
-                     [self.server_name, common.KEY_GAMES], self.client_queue)
-        
+        msg = clientlib.make_req_list_opened()
+        send_message(self.channel, msg, routing_key, self.client_queue)
         # Sending request to get list of closed games
-        send_message(self.channel, [common.REQ_LIST_CLOSED],
-                     [self.server_name, common.KEY_GAMES], self.client_queue)
+        msg = clientlib.make_req_list_closed()
+        send_message(self.channel, msg, routing_key, self.client_queue)
     
     def create_game(self):
         '''Send game creation request to server.
         '''
-        gamename = self.gamename_entry.get()
-        if gamename.strip() == '':
+        game_name = self.gamename_entry.get()
+        if game_name.strip() == '':
             tkMessageBox.showinfo('Name', 'Please enter name of the game')
             return
         width = self.width_entry.get()
         height = self.height_entry.get()
         
         # Sending request to create game
-        send_message(self.channel,
-                     [common.REQ_CREATE_GAME, gamename, self.client_name,
-                      str(width), str(height)],
-                     [self.server_name, common.KEY_GAMES], self.client_queue)
+        msg = clientlib.make_req_create_game(game_name, self.client_name,
+                                                 width, height)
+        routing_key = common.make_key_games(self.server_name)
+        send_message(self.channel, msg, routing_key, self.client_queue)
     
     def join_game(self):
         '''Send join game request to server.
         '''
         if self.listbox_opened.curselection() == ():
             return
-        gamename = self.listbox_opened.get(self.listbox_opened.curselection())
+        game_name = self.listbox_opened.get(self.listbox_opened.curselection())
         
-        # Sending request to create game
-        send_message(self.channel,
-                     [common.REQ_JOIN_GAME, gamename, self.client_name],
-                     [self.server_name, common.KEY_GAMES], self.client_queue)
+        # Sending request to join game
+        msg = clientlib.make_req_join_game(game_name, self.client_name)
+        routing_key = common.make_key_games(self.server_name)
+        send_message(self.channel, msg, routing_key, self.client_queue)
 
     def spectate_game(self):
         '''Send spectate game request to server.
         '''
         if self.listbox_closed.curselection() == ():
             return
-        gamename = self.listbox_closed.get(self.listbox_closed.curselection())
+        game_name = self.listbox_closed.get(self.listbox_closed.curselection())
         
-        # Sending request to create game
-        send_message(self.channel,
-                     [common.REQ_SPECTATE_GAME, gamename, self.client_name],
-                     [self.server_name, common.KEY_GAMES], self.client_queue)
+        # Sending request to spectate game
+        msg = clientlib.make_req_spectate_game(game_name, self.client_name)
+        routing_key = common.make_key_games(self.server_name)
+        send_message(self.channel, msg, routing_key, self.client_queue)
     
     def on_response(self, ch, method, properties, body):
         '''React on server response.

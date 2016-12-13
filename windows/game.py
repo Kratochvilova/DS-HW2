@@ -5,6 +5,7 @@ Created on Fri Dec  9 20:55:58 2016
 @author: pavla
 """
 # Imports----------------------------------------------------------------------
+import clientlib
 import common
 from common import send_message
 from . import listen
@@ -32,7 +33,7 @@ class GameButton(Tkinter.Button):
         
         self.row = row
         self.column = column
-        
+            
         self.color = None
         
         # Colors
@@ -116,13 +117,12 @@ class GameButton(Tkinter.Button):
             
             # Mark as shot and send request to server
             self.change_color('shot')
-            send_message(self.game_window.channel,
-                         [common.REQ_SHOOT, self.game_window.client_name,
-                          self.game_window.opponent,
-                          str(self.row), str(self.column)],
-                         [self.game_window.server_name,
-                          self.game_window.game_name],
-                          self.game_window.client_queue)
+            msg = clientlib.make_req_shoot(self.game_window.client_name,
+                                           self.game_window.opponent,
+                                           self.row, self.column)
+            send_message(self.game_window.channel, msg,
+                         self.game_window.key_game,
+                         self.game_window.client_queue)
         
 class GameWindow(object):
     '''Window for displaying game.
@@ -208,19 +208,26 @@ class GameWindow(object):
     def on_show(self):
         '''Bind queues, set consuming and listen.
         '''
+        # Routing keys
+        self.key_client = self.client_queue
+        self.key_server = common.make_key_server(self.server_name)
+        self.key_game = common.make_key_game(self.server_name, self.game_name)
+        self.key_events = common.make_key_game_events(self.server_name,
+                                                      self.game_name)
+        if self.spectator:
+            self.key_spectate = self.spectator_queue
+        
         # Binding queues
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.client_queue,
                                 routing_key=self.client_queue)
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.events_queue,
-                                routing_key=self.server_name + common.SEP +\
-                                    self.game_name + common.SEP +\
-                                    common.KEY_GAME_EVENTS)
+                                routing_key=self.key_events)
         if self.spectator:
             self.channel.queue_bind(exchange='direct_logs',
                                     queue=self.events_queue,
-                                    routing_key=self.spectator_queue)
+                                    routing_key=self.key_spectate)
         # Set consuming
         self.channel.basic_consume(self.on_response, 
                                    queue=self.client_queue,
@@ -233,21 +240,29 @@ class GameWindow(object):
         
         # Get field dimensions and players
         self.reset_setting()
-        self.send_simple_request(common.REQ_GET_DIMENSIONS)
-        self.send_simple_request(common.REQ_GET_PLAYERS)
-        self.send_simple_request(common.REQ_GET_PLAYERS_READY)
-        self.send_simple_request(common.REQ_GET_OWNER)
-        self.send_simple_request(common.REQ_GET_TURN)
+        
+        msg = clientlib.make_req_get_dimensions()
+        send_message(self.channel, msg, self.key_game, self.client_queue)
+        msg = clientlib.make_req_get_players()
+        send_message(self.channel, msg, self.key_game, self.client_queue)
+        msg = clientlib.make_req_get_players_ready()
+        send_message(self.channel, msg, self.key_game, self.client_queue)
+        msg = clientlib.make_req_get_owner()
+        send_message(self.channel, msg, self.key_game, self.client_queue)
+        msg = clientlib.make_req_get_turn()
+        send_message(self.channel, msg, self.key_game, self.client_queue)
         
         self.wait_for_ready()
         if self.on_turn is not None:
-            print 'Want to start game'
             self.at_game_start(self.on_turn)
-            self.send_name_request(common.REQ_GET_FIELD)
-            self.send_name_request(common.REQ_GET_HITS)
+            msg = clientlib.make_req_get_fields()
+            send_message(self.channel, msg, self.key_game, self.client_queue)
+            msg = clientlib.make_req_get_hits()
+            send_message(self.channel, msg, self.key_game, self.client_queue)
 
         if self.spectator:
-            self.send_name_request(common.REQ_GET_ALL_FIELDS)
+            msg = clientlib.make_req_get_all_fields()
+            send_message(self.channel, msg, self.key_game, self.client_queue)
 
     def hide(self):
         '''Hide the game window.
@@ -265,9 +280,7 @@ class GameWindow(object):
                                   routing_key=self.client_queue)
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.events_queue,
-                                  routing_key=self.server_name + common.SEP +\
-                                     self.game_name + common.SEP +\
-                                  common.KEY_GAME_EVENTS)
+                                  routing_key=self.key_events)
         # Stop consuming
         if threading.current_thread() == self.listening_thread:
             self.channel.stop_consuming()
@@ -282,28 +295,15 @@ class GameWindow(object):
     def disconnect(self):
         '''Disconnect from server.
         '''
-        send_message(self.channel, [common.REQ_DISCONNECT, self.client_name],
-                     [self.server_name], self.client_queue)
-        send_message(self.channel, [common.REQ_DISCONNECT, self.client_name],
-                     [self.server_name, self.game_name], self.client_queue)
+        msg = clientlib.make_req_disconnect(self.client_name)
+        send_message(self.channel, msg, self.key_server, self.client_queue)
+        send_message(self.channel, msg, self.key_game, self.client_queue)
     
     def leave(self):
         '''Leave game session.
         '''
-        send_message(self.channel, [common.REQ_LEAVE_GAME, self.client_name], 
-                     [self.server_name, self.game_name], self.client_queue)
-
-    def send_simple_request(self, request):
-        '''Send request to get info from server
-        '''
-        send_message(self.channel, [request],
-                     [self.server_name, self.game_name], self.client_queue)
-    
-    def send_name_request(self, request):
-        '''Send request to get information about fields from server
-        '''
-        send_message(self.channel, [request, self.client_name],
-                     [self.server_name, self.game_name], self.client_queue)
+        msg = clientlib.make_req_leave_game(self.client_name)
+        send_message(self.channel, msg, self.key_game, self.client_queue)
     
     def reset_setting(self):
         '''Resets frames, dimensions, list of players
@@ -472,9 +472,8 @@ class GameWindow(object):
         else:
             # Send request to server
             ships = self.fields[self.client_name].get_all_items('ship')
-            send_message(self.channel,
-                         [common.REQ_SET_READY, self.client_name] + ships,
-                         [self.server_name, self.game_name], self.client_queue)
+            msg = clientlib.make_req_set_ready(self.client_name, ships)
+            send_message(self.channel, msg, self.key_game, self.client_queue)
             # Color the button
             self.button_ready.config(bg='#68c45c',activebackground = '#68c45c')
     
@@ -484,9 +483,8 @@ class GameWindow(object):
         if self.players.issubset(self.players_ready) and\
             self.client_name in self.players_ready:
             # Send start game request to server
-            send_message(self.channel,
-                         [common.REQ_START_GAME, self.client_name],
-                         [self.server_name, self.game_name], self.client_queue)
+            msg = clientlib.make_req_start_game(self.client_name)
+            send_message(self.channel, msg, self.key_game, self.client_queue)
         else:
             tkMessageBox.showinfo('Game', 'Not all players are ready')
     
@@ -701,12 +699,17 @@ class GameWindow(object):
                     self.leave()
                 else:
                     self.spectator = True
-                    self.send_name_request(common.REQ_GET_SPECTATOR_QUEUE)
-                    self.send_name_request(common.REQ_GET_ALL_FIELDS)
+                    msg = clientlib.make_req_get_spectator_queue(
+                        self.client_name)
+                    send_message(self.channel, msg, self.key_game,
+                                 self.client_queue)
+                    msg = clientlib.make_req_get_all_fields(self.client_name)
+                    send_message(self.channel, msg, self.key_game,
+                                 self.client_queue)
             else:
                 self.remove_player(msg_parts[1])
 
-        if msg_parts[0] == common.E_END_GAME:
+        if msg_parts[0] == common.E_GAME_END:
             s = self.fields[self.client_name].get_all_items(common.FIELD_SHIP)
             if s != []:
                 tkMessageBox.showinfo('Game', 'Congratulations, you won!')
@@ -714,9 +717,11 @@ class GameWindow(object):
                 tkMessageBox.showinfo('Game', 'Game ended!')
             if self.is_owner:
                 if tkMessageBox.askyesno('Game', 'Restart session?'):
-                    self.send_simple_request(common.REQ_RESTART_SESSION)
+                    msg = clientlib.make_req_restart_session()
+                    send_message(self.channel, msg, self.key_game,
+                                 self.client_queue)
 
-        if msg_parts[0] == common.E_SESSION_RESTARTS:
+        if msg_parts[0] == common.E_GAME_RESTART:
             self.hide()
             self.show([self.server_name, self.client_name, self.game_name,
                       self.is_owner])

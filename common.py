@@ -5,6 +5,7 @@ Created on Thu Dec  1 21:38:50 2016
 @author: pavla kratochvilova
 """
 # Imports ---------------------------------------------------------------------
+import functools
 import pika
 # Logging ---------------------------------------------------------------------
 import logging
@@ -17,11 +18,44 @@ DEFAULT_SERVER_INET_ADDR = '127.0.0.1'
 # Routing keys ----------------------------------------------------------------
 KEY_SERVER_ADVERT = 'server_advert'
 KEY_SERVER_STOP = 'server_stop'
-KEY_GAMES = 'games'             # server_name, KEY_GAMES
-KEY_GAME_OPEN = 'game open'     # server_name, KEY_GAME_OPEN
-KEY_GAME_CLOSE = 'game close'   # server_name, KEY_GAME_CLOSE
-KEY_GAME_END = 'game end'       # server_name, KEY_GAME_END
-KEY_GAME_EVENTS = 'game events' # server_name, game_name, KEY_GAME_EVENTS
+KEY_GAMES = 'games'
+KEY_GAME_ADVERT = 'game advert'
+KEY_GAME_EVENTS = 'game events'
+
+# Routing keys functions ------------------------------------------------------
+def do_str(f):
+    @functools.wraps(f)
+    def wrapped(*args):
+        return SEP.join(f(*args))
+    return wrapped
+
+@do_str
+def make_key_server_advert():
+    return KEY_SERVER_ADVERT,
+
+@do_str
+def make_key_server_stop():
+    return KEY_SERVER_STOP,
+
+@do_str
+def make_key_server(server_name):
+    return server_name,
+
+@do_str
+def make_key_games(server_name):
+    return server_name, KEY_GAMES
+
+@do_str
+def make_key_game_advert(server_name):
+    return server_name, KEY_GAME_ADVERT
+
+@do_str
+def make_key_game(server_name, game_name):
+    return server_name, game_name
+
+@do_str
+def make_key_game_events(server_name, game_name):
+    return server_name, game_name, KEY_GAME_EVENTS
 
 # Connecting ------------------------------------------------------------------
 # Requests
@@ -91,8 +125,12 @@ E_ON_TURN = 'on turn'
 E_HIT = 'hit'
 E_SINK = 'sink'
 E_PLAYER_END = 'player end'
-E_END_GAME = 'end game'
-E_SESSION_RESTARTS = 'session restarts'
+E_GAME_RESTART = 'game restart'
+
+# Game advert events ----------------------------------------------------------
+E_GAME_OPEN = 'game open'
+E_GAME_CLOSE = 'game close'
+E_GAME_END = 'game end'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'
@@ -111,15 +149,13 @@ FIELD_SINK_SHIP = 'sink ship'
 FIELD_UNKNOWN = 'unknown'
 
 # Common functions ------------------------------------------------------------
-def send_message(channel, msg_args, routing_args, reply_to=None):
+def send_message(channel, message, routing_key, reply_to=None):
     '''Compose message and routing key, and send request.
     @param channel: pika communication channel
-    @param msg_args: message arguments
-    @param routing_key_args: routing key arguments
+    @param message: message
+    @param routing_key: routing key
     @param reply_to: queue expecting reply
     '''
-    message = SEP.join(msg_args)
-    routing_key = SEP.join(routing_args)
     properties = pika.BasicProperties(reply_to = reply_to)
     channel.basic_publish(exchange='direct_logs', routing_key=routing_key,
                           properties=properties, body=message)

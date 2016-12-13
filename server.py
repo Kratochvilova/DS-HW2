@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO, format=FORMAT)
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.DEBUG)
 # Imports----------------------------------------------------------------------
+import serverlib
 import common
 from common import send_message
 from game import Game
@@ -39,8 +40,8 @@ class GameList():
         self.games_queue = channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.games_queue,
-                                routing_key=self.server_name + common.SEP +\
-                                    common.KEY_GAMES)
+                                routing_key=common.make_key_games(
+                                    self.server_name))
         self.channel.basic_consume(self.reply_request,
                                    queue=self.games_queue,
                                    no_ack=True)
@@ -58,8 +59,9 @@ class GameList():
         game.start()
         
         # Send event about added game
-        send_message(self.channel, [name],
-                     [self.server_name, common.KEY_GAME_OPEN])
+        msg = serverlib.make_e_game_open(name)
+        send_message(self.channel, msg,
+                     common.make_key_game_advert(self.server_name))
         
         return game
 
@@ -70,8 +72,9 @@ class GameList():
         try:
             del self.games[name]
             # Send event about removed game
-            send_message(self.channel, [name],
-                         [self.server_name, common.KEY_GAME_END])
+            msg = serverlib.make_e_game_end(name)
+            send_message(self.channel, msg,
+                         common.make_key_game_advert(self.server_name))
         except KeyError:
             pass
     
@@ -92,16 +95,16 @@ class GameList():
         # Get list of games request
         if msg_parts[0] == common.REQ_LIST_OPENED:
             game_names = [game.name for game in self.get_games('opened')]
-            return [common.RSP_LIST_OPENED] + game_names
+            return serverlib.make_rsp_list_opened(game_names)
         if msg_parts[0] == common.REQ_LIST_CLOSED:
             game_names = [game.name for game in self.get_games('closed')]
-            return [common.RSP_LIST_CLOSED ] + game_names
-
+            return serverlib.make_rsp_list_closed(game_names)
+        
         # Create game request
         if msg_parts[0] == common.REQ_CREATE_GAME:
             if len(msg_parts) != 5 or msg_parts[1].strip() == '' or\
                 msg_parts[3].strip() == '' or msg_parts[4].strip() == '':
-                return [common.RSP_INVALID_REQUEST]
+                return serverlib.make_rsp_invalid_request()
             
             game_name = msg_parts[1]
             client_name = msg_parts[2]
@@ -109,58 +112,59 @@ class GameList():
             height = msg_parts[4]
             
             if game_name in self.games:
-                return [common.RSP_NAME_EXISTS]
+                return serverlib.make_rsp_name_exists()
             if client_name not in self.clients.client_set:
-                return [common.RSP_PERMISSION_DENIED]
+                return serverlib.make_rsp_permission_denied()
             
             game = self.add_game(game_name, client_name, width, height)
             game.wait_for_ready()
             game.client_queues[client_name] = properties.reply_to
-            return [common.RSP_GAME_ENTERED, game_name, '1']
+            return serverlib.make_rsp_game_entered(game_name, 1)
         
         # Join game request
         if msg_parts[0] == common.REQ_JOIN_GAME:
             if len(msg_parts) != 3:
-                return [common.RSP_INVALID_REQUEST]
+                return serverlib.make_rsp_invalid_request()
             
             game_name = msg_parts[1]
             client_name = msg_parts[2]
             
             if game_name not in self.games:
-                return [common.RSP_NAME_DOESNT_EXIST]
+                return serverlib.make_rsp_name_doesnt_exist()
             if client_name not in self.clients.client_set:
-                return [common.RSP_PERMISSION_DENIED]
+                return serverlib.make_rsp_permission_denied()
             
             if client_name not in self.games[game_name].players:
                 self.games[game_name].players.add(client_name)
                 self.games[game_name].client_queues[client_name] =\
                     properties.reply_to
                 # Send event that new player was added
-                send_message(self.channel, [common.E_NEW_PLAYER, client_name],
-                             [self.server_name, game_name,
-                              common.KEY_GAME_EVENTS])
+                msg = serverlib.make_e_new_player(client_name)
+                send_message(self.channel, msg,
+                             common.make_key_game_events(self.server_name,
+                                                         game_name))
             
-            return [common.RSP_GAME_ENTERED, game_name, '0']
+            return serverlib.make_rsp_game_entered(game_name, 0)
         
         # Spectating game request
         if msg_parts[0] == common.REQ_SPECTATE_GAME:
             if len(msg_parts) != 3:
-                return [common.RSP_INVALID_REQUEST]
+                return serverlib.make_rsp_invalid_request()
             
             game_name = msg_parts[1]
             client_name = msg_parts[2]
             
             if game_name not in self.games:
-                return [common.RSP_NAME_DOESNT_EXIST]
+                return serverlib.make_rsp_name_doesnt_exist()
             if client_name not in self.clients.client_set:
-                return [common.RSP_PERMISSION_DENIED]
+                return serverlib.make_rsp_permission_denied()
             if client_name in self.games[game_name].players:
-                return [common.RSP_PERMISSION_DENIED]
+                return serverlib.make_rsp_permission_denied()
             
             game = self.games[game_name]
             game.spectators.add(client_name)
-            return [common.RSP_GAME_SPECTATE, game_name, '0',
-                    game.spectator_queue]
+            return serverlib.make_rsp_game_spectate(game_name, 0,
+                                                    game.spectator_queue)
 
     def reply_request(self, ch, method, properties, body):
         '''Reply to request about list of games.
@@ -172,8 +176,7 @@ class GameList():
         LOG.debug('Processing game list request.')
         LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.SEP)
-        response_parts = self.process_request(msg_parts, properties)
-        response = common.SEP.join(response_parts)
+        response = self.process_request(msg_parts, properties)
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',
@@ -219,15 +222,15 @@ class Clients():
         # Connect request
         if msg_parts[0] == common.REQ_CONNECT:
             if len(msg_parts) != 2:
-                response = common.RSP_INVALID_REQUEST
+                response = serverlib.make_rsp_invalid_request()
             else:
                 client_name = msg_parts[1].strip()
                 if client_name in self.client_set:
-                    response = common.RSP_USERNAME_TAKEN
+                    response = serverlib.make_rsp_username_taken()
                 else:
                     self.client_set.add(msg_parts[1].strip())
-                    response = common.RSP_CONNECTED + common.SEP +\
-                        self.server_name + common.SEP + client_name
+                    response = serverlib.make_rsp_connected(self.server_name,
+                                                            client_name)
         
         # Disconnect request
         elif msg_parts[0] == common.REQ_DISCONNECT:
@@ -235,7 +238,7 @@ class Clients():
                 self.client_set.remove(msg_parts[1])
             except KeyError:
                 pass
-            response = common.RSP_DISCONNECTED
+            response = serverlib.make_rsp_disconnected()
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',
@@ -250,13 +253,13 @@ def __info():
 def publish_server_advertisements(server_on, channel, message):
     while server_on[0]:
         channel.basic_publish(exchange='direct_logs', 
-                              routing_key=common.KEY_SERVER_ADVERT, 
+                              routing_key=common.make_key_server_advert(), 
                               body=message)
         sleep(2)
 
 def stop_server(channel, message):
     channel.basic_publish(exchange='direct_logs', 
-                          routing_key=common.KEY_SERVER_STOP, 
+                          routing_key=common.make_key_server_stop(), 
                           body=message)
 
 # Main function ---------------------------------------------------------------

@@ -5,6 +5,7 @@ Created on Tue Dec  6 21:29:21 2016
 @author: pavla
 """
 # Imports----------------------------------------------------------------------
+import clientlib
 import common
 from common import send_message
 from . import listen
@@ -80,10 +81,10 @@ class ServerWindow(object):
         # Binding queues
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.server_advertisements,
-                                routing_key=common.KEY_SERVER_ADVERT)
+                                routing_key=common.make_key_server_advert())
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.server_advertisements,
-                                routing_key=common.KEY_SERVER_STOP)
+                                routing_key=common.make_key_server_stop())
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.client_queue,
                                 routing_key=self.client_queue)
@@ -110,10 +111,10 @@ class ServerWindow(object):
         # Unbinding queues
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.server_advertisements,
-                                  routing_key=common.KEY_SERVER_ADVERT)
+                                  routing_key=common.make_key_server_advert())
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.server_advertisements,
-                                  routing_key=common.KEY_SERVER_STOP)
+                                  routing_key=common.make_key_server_stop())
         self.channel.queue_unbind(exchange='direct_logs',
                                   queue=self.client_queue,
                                   routing_key=self.client_queue)
@@ -148,9 +149,9 @@ class ServerWindow(object):
         @param properties: pika.spec.BasicProperties
         @param body: str or unicode
         '''
-        if method.routing_key == common.KEY_SERVER_ADVERT:
+        if method.routing_key == common.make_key_server_advert():
             self.add_server(body)
-        if method.routing_key == common.KEY_SERVER_STOP:
+        if method.routing_key == common.make_key_server_stop():
             self.remove_server(body)
        
     def connect_server(self):
@@ -159,14 +160,15 @@ class ServerWindow(object):
         if self.listbox.curselection() == ():
             return
         server_name = self.listbox.get(self.listbox.curselection())
-        username = self.username_entry.get()
-        if username.strip() == '':
+        client_name = self.username_entry.get()
+        if client_name.strip() == '':
             tkMessageBox.showinfo('Username', 'Please enter username')
             return
         
         # Sending connect request
-        send_message(self.channel, [common.REQ_CONNECT, username],
-                     [server_name], self.client_queue)
+        msg = clientlib.make_req_connect(client_name)
+        routing_key = common.make_key_server(server_name)
+        send_message(self.channel, msg, routing_key, self.client_queue)
 
     def on_response(self, ch, method, properties, body):
         '''React on server response about connecting.

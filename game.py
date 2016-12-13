@@ -5,6 +5,7 @@ Created on Sat Dec 10 12:54:37 2016
 @author: pavla
 """
 # Imports----------------------------------------------------------------------
+import serverlib
 import common
 from common import send_message
 import random
@@ -63,13 +64,18 @@ class Game(threading.Thread):
         self.channel = self.connection.channel()
         self.channel.exchange_declare(exchange='direct_logs', type='direct')
         
+        # Routing keys
+        self.key_game = common.make_key_game(self.server_name, self.name)
+        self.key_events = common.make_key_game_events(self.server_name,
+                                                      self.name)
+        self.key_adverts = common.make_key_game_advert(self.server_name)
+        
         # Game queue
         self.game_queue =\
             self.channel.queue_declare(exclusive=True).method.queue
         self.channel.queue_bind(exchange='direct_logs',
                                 queue=self.game_queue,
-                                routing_key=self.server_name + common.SEP +\
-                                    self.name)
+                                routing_key=self.key_game)
         self.channel.basic_consume(self.process_request,
                                    queue=self.game_queue,
                                    no_ack=True)
@@ -238,8 +244,8 @@ class Game(threading.Thread):
             new_owner = random.choice(self.client_queues.keys())
             self.owner = new_owner
             # Send event that owner changed
-            send_message(self.channel, [common.E_NEW_OWNER, new_owner],
-                         [self.server_name, self.name, common.KEY_GAME_EVENTS])
+            msg = serverlib.make_e_new_owner(new_owner)
+            send_message(self.channel, msg, self.key_events)
 
     def process_request(self, ch, method, properties, body):
         '''Process game request.
@@ -255,104 +261,97 @@ class Game(threading.Thread):
         
         # Disconnect request
         if msg_parts[0] == common.REQ_DISCONNECT:
-            response = common.RSP_DISCONNECTED
+            response = serverlib.make_rsp_disconnected()
             self.player_left(msg_parts[1])
         
         # Leave game request
         if msg_parts[0] == common.REQ_LEAVE_GAME:
             if len(msg_parts) != 2:
-                response = common.RSP_INVALID_REQUEST
+                response = serverlib.make_rsp_invalid_request()
             else:
                 try:
                     self.players.remove(msg_parts[1])
                 except ValueError:
                     pass
-                response = common.RSP_GAME_LEFT
+                response = serverlib.make_rsp_game_left()
                 self.player_left(msg_parts[1])
                 # Send event that player left
-                send_message(self.channel, [common.E_PLAYER_LEFT,msg_parts[1]],
-                             [self.server_name, self.name,
-                              common.KEY_GAME_EVENTS])
+                msg = serverlib.make_e_player_left(msg_parts[1])
+                send_message(self.channel, msg, self.key_events)
                                                
         # Get dimensions request
         if msg_parts[0] == common.REQ_GET_DIMENSIONS:
-            response = common.SEP.join([common.RSP_DIMENSIONS,
-                                       self.width, self.height,
-                                       str(self.ship_number)])
+            response = serverlib.make_rsp_dimensions(self.width, self.height,
+                                                     self.ship_number)
         
         # Get players request
         if msg_parts[0] == common.REQ_GET_PLAYERS:
-            response = common.SEP.join([common.RSP_LIST_PLAYERS] +\
-                                        list(self.players))
+            response = serverlib.make_rsp_list_players(list(self.players))
 
         # Get players ready request
         if msg_parts[0] == common.REQ_GET_PLAYERS_READY:
-            ready = [p for p in self.fields if self.fields[p] != {}]
-            response = common.SEP.join([common.RSP_LIST_PLAYERS_READY] + ready)
+            players_ready = [p for p in self.fields if self.fields[p] != {}]
+            response = serverlib.make_rsp_list_players_ready(players_ready)
         
         # Get owner request
         if msg_parts[0] == common.REQ_GET_OWNER:
-            response = common.SEP.join([common.RSP_OWNER, self.owner])
+            response = serverlib.make_rsp_owner(self.owner)
         
         # Get turn request
         if msg_parts[0] == common.REQ_GET_TURN:
-            if self.on_turn == None:
-                response = common.RSP_TURN
-            else:
-                response = common.RSP_TURN + common.SEP + self.on_turn
+            response = serverlib.make_rsp_turn(self.on_turn)
         
         # Get field request
         if msg_parts[0] == common.REQ_GET_FIELD:
-            response = common.SEP.join([common.RSP_FIELD] +\
-                                        self.get_field(msg_parts[1]))
+            response = serverlib.make_rsp_field(self.get_field(msg_parts[1]))
         
         # Get hits request
         if msg_parts[0] == common.REQ_GET_HITS:
-            response = common.SEP.join([common.RSP_HITS] +\
-                                        self.get_hits(msg_parts[1]))    
+            response = serverlib.make_rsp_hits(self.get_hits(msg_parts[1]))
         
         # Get all fields request
         if msg_parts[0] == common.REQ_GET_ALL_FIELDS:
             if msg_parts[1] not in self.spectators:
-                response = common.RSP_PERMISSION_DENIED
+                response = serverlib.make_rsp_permission_denied()
             else:
-                response = common.RSP_ALL_FIELDS
+                fields = []
                 for player in self.players:
                     items = self.fields[player].get_all_items()
-                    response += common.SEP + common.SEP.join([player] + items)
+                    fields += common.SEP + common.SEP.join([player] + items)
+                response = serverlib.make_rsp_all_fields(fields)
         
         if msg_parts[0] == common.REQ_GET_SPECTATOR_QUEUE:
             if msg_parts[1] not in self.spectators:
-                response = common.RSP_PERMISSION_DENIED
+                response = serverlib.make_rsp_permission_denied()
             else:
-                response = common.RSP_SPECTATOR_QUEUE + common.SEP +\
-                    self.spectator_queue
+                response = serverlib.make_rsp_spectator_queue(
+                    self.spectator_queue)
         
         # Set ready request
         if msg_parts[0] == common.REQ_SET_READY:
             if not self.check_ships(msg_parts[2:]):
-                response = common.RSP_SHIPS_INCORRECT
+                response = serverlib.make_rsp_ships_incorrect()
             else:
                 self.add_ships(msg_parts[1], msg_parts[2:])
-                response = common.RSP_READY
+                response = serverlib.make_rsp_ready()
                 # Send event that player is ready
-                send_message(self.channel,
-                             [common.E_PLAYER_READY, msg_parts[1]],
-                             [self.server_name, self.name,
-                              common.KEY_GAME_EVENTS])
+                msg = response = serverlib.make_e_player_ready(msg_parts[1])
+                send_message(self.channel, msg, self.key_events)
         
         # Start game request
         if msg_parts[0] == common.REQ_START_GAME:
             response = common.RSP_OK
             if not self.players.issubset(set(self.fields.keys())):
-                response = common.RSP_NOT_ALL_READY
+                response = serverlib.make_rsp_not_all_ready()
             else:
                 self.state = 'closed'
                 for player in self.players:
                     self.player_hits[player] = []
-                # Send event about game start
-                send_message(self.channel, [self.name],
-                             [self.server_name, common.KEY_GAME_CLOSE])
+                
+                # Send advert about game start
+                msg = serverlib.make_e_game_close(self.name)
+                send_message(self.channel, msg, self.key_adverts)
+                
                 # Determine player order
                 self.on_turn = self.owner
                 self.player_order.append(self.owner)
@@ -364,15 +363,13 @@ class Game(threading.Thread):
                     not_sorted.remove(random_player)
                 
                 # Send event that game starts
-                send_message(self.channel,
-                             [common.E_GAME_STARTS, self.on_turn],
-                             [self.server_name, self.name,
-                              common.KEY_GAME_EVENTS])
+                msg = serverlib.make_e_game_starts(self.on_turn)
+                send_message(self.channel, msg, self.key_events)
         
         # Shoot request
         if msg_parts[0] == common.REQ_SHOOT:
             if msg_parts[1] != self.on_turn:
-                response = common.RSP_NOT_ON_TURN
+                response = serverlib.make_rsp_not_on_turn()
             else:
                 item = self.fields[msg_parts[2]].get_item(int(msg_parts[3]),
                                                           int(msg_parts[4]))
@@ -381,18 +378,18 @@ class Game(threading.Thread):
                 self.player_hits[msg_parts[1]].append(common.FIELD_SEP.join(
                     [msg_parts[2], msg_parts[3], msg_parts[4], item]))
                 if item == common.FIELD_WATER:
-                    response = common.SEP.join([common.RSP_MISS]+msg_parts[1:])
+                    response = serverlib.make_rsp_miss(*msg_parts[1:])
                 else:
                     self.fields[msg_parts[2]].change_item(
                         int(msg_parts[3]), int(msg_parts[4]),
                         common.FIELD_SHIP, common.FIELD_HIT_SHIP)
-                    response = common.SEP.join([common.RSP_HIT]+msg_parts[1:])
+                    response = serverlib.make_rsp_hit(*msg_parts[1:])
                     # Notify the hit player
-                    send_message(self.channel, [common.RSP_HIT]+msg_parts[1:],
+                    msg = serverlib.make_e_hit(*msg_parts[1:])
+                    send_message(self.channel, msg,
                                  [self.client_queues[msg_parts[2]]])
                     # Send secret event for spectators
-                    send_message(self.channel, [common.E_HIT] + msg_parts[1:],
-                                 [self.spectator_queue])
+                    send_message(self.channel, msg, [self.spectator_queue])
                                  
                     # Check if ship sinked
                     ships = self.check_sink_ship(self.fields[msg_parts[2]],
@@ -401,18 +398,15 @@ class Game(threading.Thread):
                     if ships is not None:
                         ships_string= self.sink_ship(self.fields[msg_parts[2]],
                                                      ships)
-                        send_message(self.channel, [common.E_SINK,
-                                     msg_parts[2]] + ships_string,
-                                     [self.server_name, self.name,
-                                      common.KEY_GAME_EVENTS])
+                        msg = serverlib.make_e_sink(msg_parts[2], ships_string)
+                        send_message(self.channel, msg, self.key_events)
                         
                         if self.count_player_ships(msg_parts[2]) == 0:
                             self.players.remove(msg_parts[2])
                             self.spectators.add(msg_parts[2])
-                            send_message(self.channel, [common.E_PLAYER_END,
-                                                        msg_parts[2]],
-                                         [self.server_name, self.name,
-                                          common.KEY_GAME_EVENTS])
+                            msg = serverlib.make_e_player_end(msg_parts[2])
+                            send_message(self.channel, msg, self.key_events)
+                            
                             if self.on_turn == msg_parts[2]:
                                 # Change turn
                                 i = self.player_order.index(self.on_turn) - 1
@@ -424,9 +418,8 @@ class Game(threading.Thread):
                             
                             # Check end-game condition
                             if self.check_end_game():
-                                send_message(self.channel, [common.E_END_GAME],
-                                             [self.server_name, self.name,
-                                              common.KEY_GAME_EVENTS])
+                                msg = serverlib.make_e_game_end(self.name)
+                                send_message(self.channel, msg,self.key_events)
                     
                 # Change turn
                 next_index = self.player_order.index(self.on_turn) + 1
@@ -434,18 +427,17 @@ class Game(threading.Thread):
                     next_index = 0
                 self.on_turn = self.player_order[next_index]
                 # Send on turn event
-                send_message(self.channel, [common.E_ON_TURN, self.on_turn],
-                             [self.server_name, self.name,
-                              common.KEY_GAME_EVENTS])
+                msg = serverlib.make_e_on_turn(self.on_turn)
+                send_message(self.channel, msg, self.key_events)
 
         # Restart session request
         if msg_parts[0] == common.REQ_RESTART_SESSION:
             if self.check_end_game():
-                response = common.RSP_OK
+                response = serverlib.make_rsp_ok()
                 # Send restart session event
-                send_message(self.channel, [common.E_SESSION_RESTARTS],
-                             [self.server_name, self.name,
-                              common.KEY_GAME_EVENTS])
+                msg = serverlib.make_e_game_restart()
+                send_message(self.channel, msg, self.key_events)
+                
                 # Restart game
                 self.fields = {}
                 self.on_turn = None
