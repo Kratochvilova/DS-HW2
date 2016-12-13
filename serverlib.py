@@ -95,6 +95,10 @@ def make_rsp_hits(hits):
     return [common.RSP_HITS] + hits
 
 @do_str
+def make_rsp_spectator(spectator):
+    return common.RSP_SPECTATOR, str(spectator)
+
+@do_str
 def make_rsp_spectator_queue(spectator_queue):
     return common.RSP_SPECTATOR_QUEUE, spectator_queue
 

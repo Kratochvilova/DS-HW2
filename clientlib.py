@@ -81,6 +81,10 @@ def make_req_get_all_fields(client_name):
     return common.REQ_GET_ALL_FIELDS, client_name
 
 @do_str
+def make_req_get_spectator(client_name):
+    return common.REQ_GET_SPECTATOR, client_name
+
+@do_str
 def make_req_get_spectator_queue(client_name):
     return common.REQ_GET_SPECTATOR_QUEUE, client_name
 

@@ -262,6 +262,8 @@ class GameWindow(object):
         send_message(self.channel, msg, self.key_game, self.client_queue)
         msg = clientlib.make_req_get_field(self.client_name)
         send_message(self.channel, msg, self.key_game, self.client_queue)
+        msg = clientlib.make_req_get_spectator(self.client_name)
+        send_message(self.channel, msg, self.key_game, self.client_queue)
 
         self.wait_for_ready()
         # If game already started
@@ -380,7 +382,9 @@ class GameWindow(object):
 
         for i in range(self.height):
             for j in range(self.width):
-                button = GameButton(self.frame_opponent, i, j, 'opponent', self)
+                button = GameButton(
+                    self.frame_opponent, i, j, 'opponent', self
+                )
                 button.grid(row=i+2, column=j)
                 self.opponent_buttons[(i, j)] = button
 
@@ -637,6 +641,10 @@ class GameWindow(object):
                         field.add_item(int(item_parts[0]), int(item_parts[1]),
                                        item_parts[2])
             self.update_buttons()
+
+        # Spectator
+        if msg_parts[0] == common.RSP_SPECTATOR:
+            self.spectator = msg_parts[1] == '1'
 
         # Ready
         if msg_parts[0] == common.RSP_READY:

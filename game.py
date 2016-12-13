@@ -357,6 +357,11 @@ class Game(threading.Thread):
                 all_fields += [player] + items
             return serverlib.make_rsp_all_fields(all_fields)
 
+        if msg_parts[0] == common.REQ_GET_SPECTATOR:
+            if msg_parts[1] in self.spectators:
+                return serverlib.make_rsp_spectator(1)
+            return serverlib.make_rsp_spectator(0)
+
         if msg_parts[0] == common.REQ_GET_SPECTATOR_QUEUE:
             if msg_parts[1] not in self.spectators:
                 return serverlib.make_rsp_permission_denied()
