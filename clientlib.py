@@ -92,6 +92,10 @@ def make_req_set_ready(client_name, ships):
     return [common.REQ_SET_READY, client_name] + ships
 
 @do_str
+def make_req_kick_out(client_name, opponent_name):
+    return common.REQ_KICK_OUT, client_name, opponent_name
+
+@do_str
 def make_req_start_game(client_name):
     return common.REQ_START_GAME, client_name
 

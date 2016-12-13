@@ -234,7 +234,7 @@ class Game(threading.Thread):
                 number_unfinished_players += 1
         return number_unfinished_players <= 1
     
-    def player_left(self, player):
+    def player_disconnected(self, player):
         '''Actions on player leaving or disconnecting from the game
         @param player: name of player
         '''
@@ -257,6 +257,31 @@ class Game(threading.Thread):
             # Send event that owner changed
             msg = serverlib.make_e_new_owner(new_owner)
             send_message(self.channel, msg, self.key_events)
+    
+    def player_left(self, player):
+        '''Actions on player leaving from the game
+        @param player: name of player
+        '''
+        try:
+            self.players.remove(player)
+        except KeyError:
+            pass
+        try:
+            del self.fields[player]
+        except KeyError:
+            pass
+        try:
+            del self.player_hits[player]
+        except KeyError:
+            pass
+        try:
+            self.spectators.remove(player)
+        except KeyError:
+            pass
+        
+        # Send event that player left
+        msg = serverlib.make_e_player_left(player)
+        send_message(self.channel, msg, self.key_events)
 
     def change_turn(self):
         '''Change turn to next player and send event.
@@ -275,26 +300,18 @@ class Game(threading.Thread):
         @param msg_parts: parsed message
         @return String, response
         '''
-        print self.client_queues
         # Disconnect request
         if msg_parts[0] == common.REQ_DISCONNECT:
+            self.player_disconnected(msg_parts[1])
             return serverlib.make_rsp_disconnected()
-            self.player_left(msg_parts[1])
         
         # Leave game request
         if msg_parts[0] == common.REQ_LEAVE_GAME:
             if len(msg_parts) != 2:
                 return serverlib.make_rsp_invalid_request()
-            try:
-                self.players.remove(msg_parts[1])
-            except ValueError:
-                pass
             
-            self.player_left(msg_parts[1])
-            # Send event that player left
-            msg = serverlib.make_e_player_left(msg_parts[1])
-            send_message(self.channel, msg, self.key_events)
-            
+            self.player_disconnected(msg_parts[1])
+            self.player_left(msg_parts[1])            
             return serverlib.make_rsp_game_left()
         
         # Get dimensions request
@@ -353,6 +370,13 @@ class Game(threading.Thread):
             msg = serverlib.make_e_player_ready(msg_parts[1])
             send_message(self.channel, msg, self.key_events)
             return serverlib.make_rsp_ready()
+        
+        # Kick out request
+        if msg_parts[0] == common.REQ_KICK_OUT:
+            if msg_parts[1] !=self.owner or msg_parts[2] in self.client_queues:
+                return serverlib.make_rsp_wont_kick()
+            self.player_left(msg_parts[2])
+            return serverlib.make_rsp_ok()
         
         # Start game request
         if msg_parts[0] == common.REQ_START_GAME:

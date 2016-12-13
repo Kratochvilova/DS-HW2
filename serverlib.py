@@ -102,6 +102,10 @@ def make_rsp_ready():
     return common.RSP_READY,
 
 @do_str
+def make_rsp_wont_kick():
+    return common.RSP_WONT_KICK,
+
+@do_str
 def make_rsp_ships_incorrect():
     return common.RSP_SHIPS_INCORRECT,
 

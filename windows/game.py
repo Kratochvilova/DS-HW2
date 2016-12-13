@@ -109,7 +109,7 @@ class GameButton(Tkinter.Button):
         
         # If game started and on turn
         if self.game_window.on_turn == self.game_window.client_name:
-            if self.parent == 'player' or self.game_window.opponent == None:
+            if self.parent == 'player' or self.game_window.opponent is None:
                 return
             
             # Dont allow shooting at known positions
@@ -259,14 +259,14 @@ class GameWindow(object):
         send_message(self.channel, msg, self.key_game, self.client_queue)
         msg = clientlib.make_req_get_turn()
         send_message(self.channel, msg, self.key_game, self.client_queue)
+        msg = clientlib.make_req_get_field(self.client_name)
+        send_message(self.channel, msg, self.key_game, self.client_queue)
         
         self.wait_for_ready()
         # If game already started
         if self.on_turn is not None:
             self.at_game_start(self.on_turn)
-            msg = clientlib.make_req_get_field()
-            send_message(self.channel, msg, self.key_game, self.client_queue)
-            msg = clientlib.make_req_get_hits()
+            msg = clientlib.make_req_get_hits(self.client_name)
             send_message(self.channel, msg, self.key_game, self.client_queue)
         
         if self.spectator:
@@ -386,7 +386,7 @@ class GameWindow(object):
         if self.is_owner:
             self.button_kick = Tkinter.Button(self.frame_opponent, 
                                               text="Kick out", 
-                                              command=self.start_game) #TODO
+                                              command=self.kick_out)
             self.button_kick.grid(row=self.height+4,
                                   columnspan=self.width)
 
@@ -468,7 +468,12 @@ class GameWindow(object):
             self.update_buttons()
     
     def kick_out(self):
-        pass
+        '''Kick out player
+        '''
+        if self.opponent is None:
+            return
+        msg = clientlib.make_req_kick_out(self.client_name, self.opponent)
+        send_message(self.channel, msg, self.key_game, self.client_queue)
 
     def become_owner(self):
         '''Become owner and set owner-related widgets.
@@ -627,6 +632,10 @@ class GameWindow(object):
         # Ready
         if msg_parts[0] == common.RSP_READY:
             self.players_ready.add(self.client_name)
+        
+        # Won't kick
+        if msg_parts[0] == common.RSP_WONT_KICK:
+            tkMessageBox.showinfo('Game', 'Player is not disconnected.')
         
         # Hit
         if msg_parts[0] == common.RSP_HIT:

@@ -81,6 +81,10 @@ class LobbyWindow(object):
         self.listbox_closed = Tkinter.Listbox(frame, width=40, height=10)
         self.listbox_closed.pack()
         
+        self.button_join_closed = Tkinter.Button(
+            frame, text="Join", command=self.join_game_closed)
+        self.button_join_closed.pack()        
+        
         self.button_join = Tkinter.Button(
             frame, text="Spectate", command=self.spectate_game)
         self.button_join.pack()
@@ -254,6 +258,18 @@ class LobbyWindow(object):
         if self.listbox_opened.curselection() == ():
             return
         game_name = self.listbox_opened.get(self.listbox_opened.curselection())
+        
+        # Sending request to join game
+        msg = clientlib.make_req_join_game(game_name, self.client_name)
+        routing_key = common.make_key_games(self.server_name)
+        send_message(self.channel, msg, routing_key, self.client_queue)
+
+    def join_game_closed(self):
+        '''Send join game request to server.
+        '''
+        if self.listbox_closed.curselection() == ():
+            return
+        game_name = self.listbox_closed.get(self.listbox_closed.curselection())
         
         # Sending request to join game
         msg = clientlib.make_req_join_game(game_name, self.client_name)

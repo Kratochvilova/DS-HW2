@@ -135,10 +135,10 @@ class GameList():
             if client_name not in self.clients.client_set:
                 return serverlib.make_rsp_permission_denied()
             
+            self.games[game_name].client_queues[client_name] =\
+                properties.reply_to
             if client_name not in self.games[game_name].players:
                 self.games[game_name].players.add(client_name)
-                self.games[game_name].client_queues[client_name] =\
-                    properties.reply_to
                 # Send event that new player was added
                 msg = serverlib.make_e_new_player(client_name)
                 send_message(self.channel, msg,
