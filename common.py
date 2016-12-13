@@ -17,39 +17,35 @@ DEFAULT_SERVER_INET_ADDR = '127.0.0.1'
 # Routing keys ----------------------------------------------------------------
 KEY_SERVER_ADVERT = 'server_advert'
 KEY_SERVER_STOP = 'server_stop'
-KEY_GAMES = 'games' # server_name + SEP + KEY_GAMES
-KEY_GAME_OPEN = 'game open' # server_name + SEP + KEY_GAME_OPEN
-KEY_GAME_CLOSE = 'game close' # server_name + SEP + KEY_GAME_CLOSE
-KEY_GAME_END = 'game end' # server_name + SEP + KEY_GAME_END
-KEY_GAME_EVENTS = 'game events' # server_name + SEP + game_name + SEP + 
-                                # KEY_GAME_EVENTS
+KEY_GAMES = 'games'             # server_name, KEY_GAMES
+KEY_GAME_OPEN = 'game open'     # server_name, KEY_GAME_OPEN
+KEY_GAME_CLOSE = 'game close'   # server_name, KEY_GAME_CLOSE
+KEY_GAME_END = 'game end'       # server_name, KEY_GAME_END
+KEY_GAME_EVENTS = 'game events' # server_name, game_name, KEY_GAME_EVENTS
 
 # Connecting ------------------------------------------------------------------
 # Requests
-REQ_CONNECT = 'connect'
-REQ_DISCONNECT = 'disconnect'
+REQ_CONNECT = 'req connect'
+REQ_DISCONNECT = 'req disconnect'
 # Responses
-RSP_CONNECTED = 'connected'
-RSP_DISCONNECTED = 'disconnected'
-RSP_USERNAME_TAKEN = 'username taken'
-RSP_USERNAME_DOESNT_EXIST = 'username doesnt exist'
+RSP_CONNECTED = 'rsp connected'
+RSP_DISCONNECTED = 'rsp disconnected'
+RSP_USERNAME_TAKEN = 'rsp username taken'
 
 # Game list -------------------------------------------------------------------
 # Requests
-REQ_GET_LIST_OPENED = 'get list opened'
-REQ_GET_LIST_CLOSED = 'get list closed'
-REQ_CREATE_GAME = 'create game'
-REQ_JOIN_GAME = 'join game'
-REQ_SPECTATE_GAME = 'spectate game'
+REQ_LIST_OPENED = 'req list opened'
+REQ_LIST_CLOSED = 'req list closed'
+REQ_CREATE_GAME = 'req create game'
+REQ_JOIN_GAME = 'req join game'
+REQ_SPECTATE_GAME = 'req spectate game'
 # Responses
-RSP_LIST_OPENED = 'list opened'
-RSP_LIST_CLOSED = 'list closed'
-RSP_GAME_ENTERED = 'game entered'
-RSP_GAME_SPECTATING = 'game spectating'
-RSP_INVALID_USERNAME = 'invalid username'
-RSP_PERMISSION_DENIED = 'permission denied'
-RSP_NAME_EXISTS = 'name exists'
-RSP_NAME_DOESNT_EXIST = 'name doesnt exist'
+RSP_LIST_OPENED = 'rsp list opened'
+RSP_LIST_CLOSED = 'rsp list closed'
+RSP_GAME_ENTERED = 'rsp game entered'
+RSP_GAME_SPECTATE = 'rsp game spectate'
+RSP_NAME_EXISTS = 'rsp name exists'
+RSP_NAME_DOESNT_EXIST = 'rsp name doesnt exist'
 
 # Game ------------------------------------------------------------------------
 # Requests
@@ -100,6 +96,7 @@ E_SESSION_RESTARTS = 'session restarts'
 
 # Common responses ------------------------------------------------------------
 RSP_OK = 'ok'
+RSP_PERMISSION_DENIED = 'permission denied'
 RSP_INVALID_REQUEST = 'invalid request'
 
 # Separator -------------------------------------------------------------------

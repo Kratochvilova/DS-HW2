@@ -41,7 +41,7 @@ class GameList():
                                 queue=self.games_queue,
                                 routing_key=self.server_name + common.SEP +\
                                     common.KEY_GAMES)
-        self.channel.basic_consume(self.process_request,
+        self.channel.basic_consume(self.reply_request,
                                    queue=self.games_queue,
                                    no_ack=True)
         
@@ -71,7 +71,7 @@ class GameList():
             del self.games[name]
             # Send event about removed game
             send_message(self.channel, [name],
-                     [self.server_name, common.KEY_GAME_END])
+                         [self.server_name, common.KEY_GAME_END])
         except KeyError:
             pass
     
@@ -84,8 +84,86 @@ class GameList():
             return self.games
         return [game for game in self.games.values() if game.state == state]
     
-    def process_request(self, ch, method, properties, body):
+    def process_request(self, msg_parts, properties):
         '''Process request about list of games.
+        @param msg_parts: parsed message
+        @return list, responses
+        '''
+        # Get list of games request
+        if msg_parts[0] == common.REQ_LIST_OPENED:
+            game_names = [game.name for game in self.get_games('opened')]
+            return [common.RSP_LIST_OPENED] + game_names
+        if msg_parts[0] == common.REQ_LIST_CLOSED:
+            game_names = [game.name for game in self.get_games('closed')]
+            return [common.RSP_LIST_CLOSED ] + game_names
+
+        # Create game request
+        if msg_parts[0] == common.REQ_CREATE_GAME:
+            if len(msg_parts) != 5 or msg_parts[1].strip() == '' or\
+                msg_parts[3].strip() == '' or msg_parts[4].strip() == '':
+                return [common.RSP_INVALID_REQUEST]
+            
+            game_name = msg_parts[1]
+            client_name = msg_parts[2]
+            width = msg_parts[3]
+            height = msg_parts[4]
+            
+            if game_name in self.games:
+                return [common.RSP_NAME_EXISTS]
+            if client_name not in self.clients.client_set:
+                return [common.RSP_PERMISSION_DENIED]
+            
+            game = self.add_game(game_name, client_name, width, height)
+            game.wait_for_ready()
+            game.client_queues[client_name] = properties.reply_to
+            return [common.RSP_GAME_ENTERED, game_name, '1']
+        
+        # Join game request
+        if msg_parts[0] == common.REQ_JOIN_GAME:
+            if len(msg_parts) != 3:
+                return [common.RSP_INVALID_REQUEST]
+            
+            game_name = msg_parts[1]
+            client_name = msg_parts[2]
+            
+            if game_name not in self.games:
+                return [common.RSP_NAME_DOESNT_EXIST]
+            if client_name not in self.clients.client_set:
+                return [common.RSP_PERMISSION_DENIED]
+            
+            if client_name not in self.games[game_name].players:
+                self.games[game_name].players.add(client_name)
+                self.games[game_name].client_queues[client_name] =\
+                    properties.reply_to
+                # Send event that new player was added
+                send_message(self.channel, [common.E_NEW_PLAYER, client_name],
+                             [self.server_name, game_name,
+                              common.KEY_GAME_EVENTS])
+            
+            return [common.RSP_GAME_ENTERED, game_name, '0']
+        
+        # Spectating game request
+        if msg_parts[0] == common.REQ_SPECTATE_GAME:
+            if len(msg_parts) != 3:
+                return [common.RSP_INVALID_REQUEST]
+            
+            game_name = msg_parts[1]
+            client_name = msg_parts[2]
+            
+            if game_name not in self.games:
+                return [common.RSP_NAME_DOESNT_EXIST]
+            if client_name not in self.clients.client_set:
+                return [common.RSP_PERMISSION_DENIED]
+            if client_name in self.games[game_name].players:
+                return [common.RSP_PERMISSION_DENIED]
+            
+            game = self.games[game_name]
+            game.spectators.add(client_name)
+            return [common.RSP_GAME_SPECTATE, game_name, '0',
+                    game.spectator_queue]
+
+    def reply_request(self, ch, method, properties, body):
+        '''Reply to request about list of games.
         @param ch: pika.BlockingChannel
         @param method: pika.spec.Basic.Deliver
         @param properties: pika.spec.BasicProperties
@@ -94,72 +172,8 @@ class GameList():
         LOG.debug('Processing game list request.')
         LOG.debug('Received message: %s', body)
         msg_parts = body.split(common.SEP)
-        response = None
-        
-        # Get list of games request
-        if msg_parts[0] == common.REQ_GET_LIST_OPENED:
-            game_names = [game.name for game in self.get_games('opened')]
-            response = common.RSP_LIST_OPENED + common.SEP +\
-                common.SEP.join(game_names)
-        if msg_parts[0] == common.REQ_GET_LIST_CLOSED:
-            game_names = [game.name for game in self.get_games('closed')]
-            response = common.RSP_LIST_CLOSED + common.SEP +\
-                common.SEP.join(game_names)
-
-        # Create game request
-        if msg_parts[0] == common.REQ_CREATE_GAME:
-            if len(msg_parts) != 5 or msg_parts[1].strip() == '' or\
-                msg_parts[2].strip() == '' or msg_parts[3].strip() == '' or\
-                msg_parts[4].strip() == '':
-                response = common.RSP_INVALID_REQUEST
-            elif msg_parts[1] in self.games:
-                response = common.RSP_NAME_EXISTS
-            elif msg_parts[2] not in self.clients.client_set:
-                response = common.RSP_PERMISSION_DENIED
-            else:
-                game = self.add_game(*msg_parts[1:])
-                game.wait_for_ready()
-                game.client_queues[msg_parts[2]] = properties.reply_to
-                response = common.SEP.join([common.RSP_GAME_ENTERED, 
-                                            msg_parts[1], '1'])
-        
-        # Join game request
-        if msg_parts[0] == common.REQ_JOIN_GAME:
-            if len(msg_parts) != 3 or msg_parts[1].strip() == '':
-                response = common.RSP_INVALID_REQUEST
-            elif msg_parts[1] not in self.games:
-                response = common.RSP_NAME_DOESNT_EXIST
-            elif msg_parts[2] not in self.clients.client_set:
-                response = common.RSP_PERMISSION_DENIED
-            else:
-                if msg_parts[2] not in self.games[msg_parts[1]].players:
-                    self.games[msg_parts[1]].players.add(msg_parts[2])
-                    self.games[msg_parts[1]].client_queues[msg_parts[2]] =\
-                        properties.reply_to
-                    # Send event that new player was added
-                    send_message(self.channel,
-                                 [common.E_NEW_PLAYER, msg_parts[2]],
-                                 [self.server_name, msg_parts[1], 
-                                  common.KEY_GAME_EVENTS])
-                response = common.SEP.join([common.RSP_GAME_ENTERED, 
-                                            msg_parts[1], '0'])
-        
-        # Spectating game request
-        if msg_parts[0] == common.REQ_SPECTATE_GAME:
-            if len(msg_parts) != 3 or msg_parts[1].strip() == '':
-                response = common.RSP_INVALID_REQUEST
-            elif msg_parts[1] not in self.games:
-                response = common.RSP_NAME_DOESNT_EXIST
-            elif msg_parts[2] not in self.clients.client_set:
-                response = common.RSP_PERMISSION_DENIED
-            elif msg_parts[2] in self.games[msg_parts[1]].players:
-                response = common.RSP_PERMISSION_DENIED
-            else:
-                game = self.games[msg_parts[1]]
-                game.spectators.add(msg_parts[2])
-                response = common.SEP.join([common.RSP_GAME_SPECTATING, 
-                                            msg_parts[1], '0',
-                                            game.spectator_queue])
+        response_parts = self.process_request(msg_parts, properties)
+        response = common.SEP.join(response_parts)
         
         # Sending response
         ch.basic_publish(exchange='direct_logs',

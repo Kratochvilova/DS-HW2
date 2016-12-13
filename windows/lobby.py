@@ -238,11 +238,11 @@ class LobbyWindow(object):
         '''Send requests to server to get list of all game sessions.
         '''
         # Sending request to get list of opened games
-        send_message(self.channel, [common.REQ_GET_LIST_OPENED],
+        send_message(self.channel, [common.REQ_LIST_OPENED],
                      [self.server_name, common.KEY_GAMES], self.client_queue)
         
         # Sending request to get list of closed games
-        send_message(self.channel, [common.REQ_GET_LIST_CLOSED],
+        send_message(self.channel, [common.REQ_LIST_CLOSED],
                      [self.server_name, common.KEY_GAMES], self.client_queue)
     
     def create_game(self):
@@ -296,7 +296,7 @@ class LobbyWindow(object):
         msg_parts = body.split(common.SEP)
         
         if msg_parts[0] == common.RSP_DISCONNECTED or\
-            msg_parts[0] == common.RSP_USERNAME_DOESNT_EXIST:
+            msg_parts[0] == common.RSP_NAME_DOESNT_EXIST:
             self.hide()
             self.events.put(('server', None, None))
         
@@ -322,7 +322,7 @@ class LobbyWindow(object):
                              [self.server_name, self.client_name, msg_parts[1],
                               int(msg_parts[2]), False, '']))
 
-        if msg_parts[0] == common.RSP_GAME_SPECTATING:
+        if msg_parts[0] == common.RSP_GAME_SPECTATE:
             # If game entered, hide lobby window and put event for the game
             # window with necessary arguments (server name, client name, game 
             # name, is_owner, spectator, spectator_queue)

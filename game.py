@@ -29,15 +29,21 @@ class Game(threading.Thread):
         self.width = width
         self.height = height
         self.ship_number = int(self.width) * int(self.height) / 3
-        self.owner = owner
-        self.players = set()
-        self.fields = {}
-        self.players.add(self.owner)
-        self.on_turn = None
-        self.player_hits = {}
+        
+        # Players
         self.client_queues = {}
-        self.player_order = []
+        
+        self.players = set()
         self.spectators = set()
+        
+        self.owner = owner
+        self.players.add(self.owner)
+        
+        self.fields = {}
+        self.player_hits = {}
+        
+        self.on_turn = None
+        self.player_order = []
         
         # Communication
         self.server_name = server_args.name
