@@ -764,4 +764,4 @@ class GameWindow(object):
         if msg_parts[0] == common.E_GAME_RESTART:
             self.hide()
             self.show([self.server_name, self.client_name, self.game_name,
-                       self.is_owner])
+                       self.is_owner, self.spectator, self.spectator_queue])
