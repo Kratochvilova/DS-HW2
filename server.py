@@ -283,13 +283,13 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument(
         '-H', '--host',
-        help='Addres of the RabitMQ server, defaults to %s' %
+        help='Address of the RabbitMQ server, defaults to %s' %
         common.DEFAULT_SERVER_INET_ADDR,
         default=common.DEFAULT_SERVER_INET_ADDR
     )
     parser.add_argument(
         '-p', '--port',
-        help='Port of the RabitMQ server, defaults to %d' %
+        help='Port of the RabbitMQ server, defaults to %d' %
         common.DEFAULT_SERVER_PORT,
         default=common.DEFAULT_SERVER_PORT
     )
